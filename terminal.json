@@ -1,4 +1,4 @@
 {
   "acao": "abrir_chrome",
-  "comando": "start chrome"
+  "comando": "start chrome.exe"
 }
