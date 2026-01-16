@@ -1,4 +1,4 @@
-[
-     "python BoraDeVan.exe"
-     "exit"
-   ]
+{
+  "acao": "abrir_site",
+  "comando": "start chrome https://chat.openai.com"
+}
