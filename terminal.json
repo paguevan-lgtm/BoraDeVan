@@ -1,4 +1,7 @@
 {
-  "acao": "abrir_site",
-  "comando": "start chrome https://chat.openai.com"
+  "acoes": [
+    { "nome": "Chrome", "comando": "start chrome" },
+    { "nome": "Notepad", "comando": "notepad.exe" },
+    { "nome": "Calculadora", "comando": "calc.exe" }
+  ]
 }
