@@ -1,1 +1,7 @@
-["quitt"]
+```json
+[
+  "echo Teste",
+  "dir",
+  "quit"
+]
+```
