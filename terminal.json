@@ -1,1 +1,4 @@
-quit
+[
+     "echo Monitoramento ativo",
+     "dir"
+   ]
