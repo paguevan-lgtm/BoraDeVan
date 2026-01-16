@@ -1,4 +1,4 @@
-[
-     "echo Monitoramento ativo",
-     "dir"
-   ]
+{
+  "acao": "abrir_chrome",
+  "comando": "chrome"
+}
