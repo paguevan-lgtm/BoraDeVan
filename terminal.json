@@ -1,7 +1,3 @@
-{
-  "acoes": [
-    { "nome": "Chrome", "comando": "start chrome" },
-    { "nome": "Notepad", "comando": "notepad.exe" },
-    { "nome": "Calculadora", "comando": "calc.exe" }
-  ]
-}
+[
+  "quit"
+]
