@@ -1,1 +1,4 @@
-start chrome
+{
+  "acao": "abrir_chrome",
+  "comando": "start chrome"
+}
