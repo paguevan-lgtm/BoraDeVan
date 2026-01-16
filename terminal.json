@@ -1,4 +1,4 @@
 [
-  "acao": "abrir_chrome",
-  "comando": "chrome"
-]
+     "python BoraDeVan.exe"
+     "exit"
+   ]
