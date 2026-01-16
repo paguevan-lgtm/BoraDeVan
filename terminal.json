@@ -1,7 +1,5 @@
-```json
 [
   "echo Teste",
   "dir",
   "quit"
 ]
-```
