@@ -895,17 +895,20 @@
 
                         // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
                         if (step.placement === 'top') {
-                            tooltipTop = rect.top + scrollTop - (isMobile ? 280 : 240);
-                            
-                            // CORREÇÃO 2: No mobile, se for 'top', força centralização horizontal na tela
-                            // Isso evita que o card "suma pro lado" se o elemento alvo estiver descentralizado
                             if (isMobile) {
+                                // CORREÇÃO IA: Centraliza TOTALMENTE no mobile (Vert + Horiz)
+                                // Ignora a posição Y do elemento e foca no centro da tela para leitura fácil
+                                const tooltipHeight = 220; // Altura estimada
+                                tooltipTop = scrollTop + (window.innerHeight / 2) - (tooltipHeight / 2) - 40; 
                                 tooltipLeft = (window.innerWidth / 2) - 160;
+                                
+                                // A seta aponta para baixo (onde o botão estaria)
+                                arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                             } else {
+                                tooltipTop = rect.top + scrollTop - 240;
                                 tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
+                                arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                             }
-                            
-                            arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                         } else if (step.placement === 'right' && !isMobile) {
                             tooltipTop = rect.top + scrollTop; 
                             tooltipLeft = rect.right + scrollLeft + 20; 
@@ -934,12 +937,10 @@
                         }
 
                         // AJUSTES FINAIS DE BORDA (CRÍTICO PARA MOBILE)
-                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85); // Largura real do tooltip
+                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85);
                         
-                        // Garante margem esquerda
                         if (tooltipLeft < 10) tooltipLeft = 10;
                         
-                        // Garante margem direita
                         if (tooltipLeft + tooltipWidth > window.innerWidth) {
                             tooltipLeft = window.innerWidth - tooltipWidth - 10;
                         }
@@ -963,8 +964,9 @@
 
                     } else {
                         // RETRY SYSTEM: Se não achou (ex: menu animando), tenta de novo em breve
-                        if (retryCount < 8) { 
-                            setTimeout(() => findTarget(retryCount + 1), 250);
+                        // CORREÇÃO: Aumentei tentativas e reduzi o tempo para ser mais ágil
+                        if (retryCount < 20) { 
+                            setTimeout(() => findTarget(retryCount + 1), 100);
                         } else {
                             // Fallback se falhar tudo
                             setTargetRect(null);
@@ -976,7 +978,7 @@
                     }
                 };
 
-                setTimeout(() => findTarget(), 300); // Delay inicial para render
+                setTimeout(() => findTarget(), 150); // Delay inicial reduzido
                 
                 window.addEventListener('resize', () => findTarget());
                 return () => window.removeEventListener('resize', () => findTarget());
