@@ -255,6 +255,17 @@
                 radius: 'rounded-xl',
                 palette: ['#f59e0b', '#d97706', '#fbbf24', '#b45309', '#78350f'] 
             },
+            boradevan: { 
+                name: 'Bora de Van (Oficial)', 
+                bg: 'bg-[#1A132D]', 
+                card: 'bg-[#251B3E] border-[#5E3FB1]', 
+                text: 'text-[#EDEBFF]', 
+                primary: 'bg-[#5E3FB1] text-white', 
+                accent: 'text-[#007FFF]', 
+                border: 'border-[#5E3FB1]', 
+                radius: 'rounded-xl', 
+                palette: ['#5E3FB1', '#007FFF', '#6C3EB1', '#8A6FD1', '#A9A6C7'] 
+            },
             wood: { 
                 name: 'Rústico (Madeira)', 
                 bg: 'bg-[#1a110e]', 
@@ -274,7 +285,7 @@
                 primary: 'bg-orange-600 text-white', 
                 accent: 'text-orange-400', 
                 border: 'border-zinc-800', 
-                radius: 'rounded-xl',
+                radius: 'rounded-xl', 
                 palette: ['#ea580c', '#f97316', '#fdba74', '#c2410c', '#7c2d12'] 
             },
             cyberpunk: { 
@@ -285,7 +296,7 @@
                 primary: 'bg-[#eb6f92] text-white', 
                 accent: 'text-[#f6c177]', 
                 border: 'border-[#2f3146]', 
-                radius: 'rounded-none',
+                radius: 'rounded-none', 
                 palette: ['#eb6f92', '#f6c177', '#9ccfd8', '#c4a7e7', '#31748f'] 
             },
             dracula: { 
@@ -296,7 +307,7 @@
                 primary: 'bg-[#bd93f9] text-[#282a36]', 
                 accent: 'text-[#50fa7b]', 
                 border: 'border-[#6272a4]', 
-                radius: 'rounded-xl',
+                radius: 'rounded-xl', 
                 palette: ['#bd93f9', '#50fa7b', '#ff79c6', '#8be9fd', '#ffb86c'] 
             },
             solar: { 
@@ -307,7 +318,7 @@
                 primary: 'bg-[#b58900] text-white', 
                 accent: 'text-[#cb4b16]', 
                 border: 'border-[#d2b589]', 
-                radius: 'rounded-2xl',
+                radius: 'rounded-2xl', 
                 palette: ['#b58900', '#cb4b16', '#dc322f', '#d33682', '#6c71c4'] 
             },
             midnight: { 
@@ -318,7 +329,7 @@
                 primary: 'bg-cyan-600 text-white', 
                 accent: 'text-cyan-300', 
                 border: 'border-indigo-700', 
-                radius: 'rounded-xl',
+                radius: 'rounded-xl', 
                 palette: ['#0891b2', '#06b6d4', '#67e8f9', '#4338ca', '#3730a3'] 
             },
             forest: { 
@@ -329,7 +340,7 @@
                 primary: 'bg-emerald-600 text-white', 
                 accent: 'text-emerald-400', 
                 border: 'border-green-800', 
-                radius: 'rounded-xl',
+                radius: 'rounded-xl', 
                 palette: ['#059669', '#10b981', '#34d399', '#065f46', '#064e3b'] 
             },
         };
@@ -391,435 +402,102 @@
             Message: () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></Icon>
         };
 
-        /* --- HELPERS --- */
-        const getTodayDate = () => {
-            const d = new Date();
-            const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
-            return local.toISOString().split('T')[0];
-        };
-
-        const getOperationalDate = () => {
-            const d = new Date();
-            if (d.getHours() > 19 || (d.getHours() === 19 && d.getMinutes() >= 30)) {
-                 d.setDate(d.getDate() + 1);
-            }
-            const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
-            return local.toISOString().split('T')[0];
-        };
-
-        const formatDisplayDate = (d) => {
-            if(!d) return '';
-            const [y, m, day] = d.split('-');
-            return `${day}/${m}/${y}`;
-        };
-        
-        const dateAddDays = (dateStr, days) => {
-            const d = new Date(dateStr + 'T00:00:00');
-            d.setDate(d.getDate() + days);
-            return d.toISOString().split('T')[0];
-        };
-
+        /* --- HELPERS & UTILS (RESTAURADO) --- */
+        const getTodayDate = () => { const d = new Date(); const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)); return local.toISOString().split('T')[0]; };
+        const getOperationalDate = () => { const d = new Date(); if (d.getHours() > 19 || (d.getHours() === 19 && d.getMinutes() >= 30)) { d.setDate(d.getDate() + 1); } const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)); return local.toISOString().split('T')[0]; };
+        const formatDisplayDate = (d) => { if(!d) return ''; const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; };
+        const dateAddDays = (dateStr, days) => { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0]; };
         const formatTime = (t) => t; 
-
         const getBairroIdx = b => { const i=BAIRROS.indexOf(b); return i===-1?99:i; };
-
-        const getAvatarUrl = (name) => {
-            if(name && name.toLowerCase() === 'breno') {
-                return `https://api.dicebear.com/7.x/avataaars/svg?seed=Robert`; 
-            }
-            return `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
-        };
-
+        const getAvatarUrl = (name) => { if(name && name.toLowerCase() === 'breno') return `https://api.dicebear.com/7.x/avataaars/svg?seed=Robert`; return `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`; };
         const generateUniqueId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+        const addMinutes = (time, mins) => { if(!time) return ''; const [h, m] = time.split(':').map(Number); const date = new Date(); date.setHours(h); date.setMinutes(m + mins); return date.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', hour12: false}); }
+        const calculateTimeSlot = (t) => { if(!t) return '-'; const endTime = addMinutes(t, 45); return `${t} - ${endTime}`; };
+        const generateWhatsappMessage = (tripId, passengers, driverName, time, date) => { if(!passengers?.length) return ""; const [y, m, d] = date.split('-'); const formattedDate = `${d}/${m}/${y}`; let msg = `*DADOS DA VIAGEM - ${formattedDate}*\n\n`; msg += `*Código:* ${tripId}\n`; msg += `*Horário:* ${time}\n`; msg += `*PASSAGEIRO(S):*\n\n`; const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood)); sorted.forEach((p, index) => { const endTime = addMinutes(p.time || time, 45); msg += `*Passageiro ${index + 1}:*\n`; msg += `• Nome: ${p.name}\n`; msg += `• Telefone: ${p.phone || 'Sem número'}\n`; msg += `• Endereço: ${p.address || ''}\n`; msg += `• Referência: ${p.reference || ''}\n`; msg += `• Bairro: ${p.neighborhood || ''}\n`; msg += `• Qtd: ${p.passengerCount || 1} passageiro(s)\n`; msg += `• Horário: ${p.time || time}/${endTime}\n`; msg += `• Bagagens: ${p.luggageCount || 0} bagagens\n\n`; }); msg += `_Enviado via Bora de Van Transportes_`; return msg; };
+        const sendPaxWhatsapp = (p) => { if(!p.phone) return alert('Passageiro sem telefone.'); const msg = encodeURIComponent(`Olá ${p.name}, sobre seu agendamento para ${formatDisplayDate(p.date)} às ${p.time}...`); window.open(`https://wa.me/55${p.phone.replace(/\D/g,'')}?text=${msg}`, '_blank'); };
+        const generateTripListText = (passengers, driverName, time) => { const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood)); return `VIAGEM ${time} - ${driverName}\n\n` + sorted.map(p=> `• ${p.name} - ${p.neighborhood}\n  ${p.address} (${p.reference || ''})`).join('\n\n'); };
 
-        const addMinutes = (time, mins) => {
-            if(!time) return '';
-            const [h, m] = time.split(':').map(Number);
-            const date = new Date();
-            date.setHours(h);
-            date.setMinutes(m + mins);
-            return date.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', hour12: false});
-        }
-
-        const calculateTimeSlot = (t) => { 
-            if(!t) return '-'; 
-            const endTime = addMinutes(t, 45);
-            return `${t} - ${endTime}`; 
-        };
-        
-        const generateWhatsappMessage = (tripId, passengers, driverName, time, date) => {
-            if(!passengers?.length) return "";
-            
-            const [y, m, d] = date.split('-');
-            const formattedDate = `${d}/${m}/${y}`;
-
-            let msg = `*DADOS DA VIAGEM - ${formattedDate}*\n\n`;
-            msg += `*Código:* ${tripId}\n`;
-            msg += `*Horário:* ${time}\n`;
-            msg += `*PASSAGEIRO(S):*\n\n`;
-
-            const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
-
-            sorted.forEach((p, index) => {
-                const endTime = addMinutes(p.time || time, 45);
-                msg += `*Passageiro ${index + 1}:*\n`;
-                msg += `• Nome: ${p.name}\n`;
-                msg += `• Telefone: ${p.phone || 'Sem número'}\n`;
-                msg += `• Endereço: ${p.address || ''}\n`;
-                msg += `• Referência: ${p.reference || ''}\n`;
-                msg += `• Bairro: ${p.neighborhood || ''}\n`;
-                msg += `• Qtd: ${p.passengerCount || 1} passageiro(s)\n`;
-                msg += `• Horário: ${p.time || time}/${endTime}\n`;
-                msg += `• Bagagens: ${p.luggageCount || 0} bagagens\n\n`;
-            });
-
-            msg += `_Enviado via Bora de Van Transportes_`;
-            return msg;
-        };
-
-        const sendPaxWhatsapp = (p) => {
-            if(!p.phone) return alert('Passageiro sem telefone.');
-            const msg = encodeURIComponent(`Olá ${p.name}, sobre seu agendamento para ${formatDisplayDate(p.date)} às ${p.time}...`);
-            window.open(`https://wa.me/55${p.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
-        };
-
-        const generateTripListText = (passengers, driverName, time) => {
-            const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
-            return `VIAGEM ${time} - ${driverName}\n\n` + sorted.map(p=> `• ${p.name} - ${p.neighborhood}\n  ${p.address} (${p.reference || ''})`).join('\n\n');
-        };
-
-        // NOVO COMPONENTE: Timer em Tempo Real para Viagens Temporárias
         const TempTripTimer = ({ date, time }) => {
             const [timeLeft, setTimeLeft] = useState('');
-            
             useEffect(() => {
-                const tick = () => {
-                    if (!date || !time) return;
-                    const [y, mo, d] = date.split('-').map(Number);
-                    const [h, mi] = time.split(':').map(Number);
-                    // Cria data de início baseada nos dados da viagem (que está +60min do slot real)
-                    const tripStart = new Date(y, mo - 1, d, h, mi, 0);
-                    
-                    // AJUSTE: O timer deve expirar 15 minutos ANTES do horário visual da viagem
-                    // Motivo: Viagem visual é Slot+60min. Exclusão deve ser Slot+45min.
-                    // Logo: (Slot+60) - 15 = Slot+45.
-                    const expiration = new Date(tripStart.getTime() - 15 * 60000);
-                    
-                    const now = new Date();
-                    const diff = expiration - now;
-                    
-                    if (diff <= 0) {
-                        setTimeLeft('Expirado');
-                    } else {
-                        const m = Math.floor(diff / 60000);
-                        const s = Math.floor((diff % 60000) / 1000);
-                        setTimeLeft(`${m}m ${s}s restantes`);
-                    }
-                };
-                tick(); // Atualiza imediatamente
-                const int = setInterval(tick, 1000); // Atualiza a cada segundo
-                return () => clearInterval(int);
+                const tick = () => { if (!date || !time) return; const [y, mo, d] = date.split('-').map(Number); const [h, mi] = time.split(':').map(Number); const tripStart = new Date(y, mo - 1, d, h, mi, 0); const expiration = new Date(tripStart.getTime() - 15 * 60000); const now = new Date(); const diff = expiration - now; if (diff <= 0) { setTimeLeft('Expirado'); } else { const m = Math.floor(diff / 60000); const s = Math.floor((diff % 60000) / 1000); setTimeLeft(`${m}m ${s}s restantes`); } }; tick(); const int = setInterval(tick, 1000); return () => clearInterval(int);
             }, [date, time]);
-
             return <span>{timeLeft}</span>;
         };
 
-        /* --- PRINT FUNCTION --- */
         const handlePrint = async (targetId, filename, title, options = {}) => {
             const element = document.getElementById(targetId);
             if (!element) return alert("Elemento não encontrado para impressão.");
-
-            const activeBtn = document.activeElement;
-            const originalHTML = activeBtn ? activeBtn.innerHTML : '';
-            if(activeBtn) {
-                activeBtn.innerText = 'Gerando...';
-                activeBtn.disabled = true;
-            }
-
+            const activeBtn = document.activeElement; const originalHTML = activeBtn ? activeBtn.innerHTML : ''; if(activeBtn) { activeBtn.innerText = 'Gerando...'; activeBtn.disabled = true; }
             try {
-                let target = element;
-                let clone = null;
-                let wrapper = null;
-
-                const itemCount = element.children.length;
-                let columns = 1;
-
-                if (options.forceCols) {
-                    columns = options.forceCols;
-                } else if (options.mode === 'confirmados') {
-                    columns = itemCount > 12 ? 2 : 1;
-                } else if (options.mode === 'lousa') {
-                    columns = Math.ceil(itemCount / 12);
-                    if (columns < 1) columns = 1;
-                }
-
-                wrapper = document.createElement('div');
-                wrapper.style.position = 'fixed';
-                wrapper.style.left = '-9999px';
-                wrapper.style.top = '0';
-                wrapper.style.backgroundColor = '#1e293b';
-                wrapper.style.color = 'white';
-                wrapper.style.padding = '40px'; 
-                wrapper.style.zIndex = '99999';
-                
-                // DATA DO TÍTULO DO PRINT
-                let dateStr = new Date().toLocaleDateString('pt-BR');
-                if (options.date) {
-                    const [y, m, d] = options.date.split('-');
-                    dateStr = `${d}/${m}/${y}`;
-                }
-
-                const titleEl = document.createElement('h1');
-                titleEl.innerText = `${title} - ${dateStr}`;
-                titleEl.style.textAlign = 'center';
-                titleEl.style.marginBottom = '25px';
-                titleEl.style.fontSize = '32px'; 
-                titleEl.style.fontWeight = 'bold';
-                titleEl.style.color = '#fbbf24'; 
-                titleEl.style.width = '100%';
-                wrapper.appendChild(titleEl);
-
+                let target = element; let clone = null; let wrapper = null;
+                const itemCount = element.children.length; let columns = 1;
+                if (options.forceCols) { columns = options.forceCols; } else if (options.mode === 'confirmados') { columns = itemCount > 12 ? 2 : 1; } else if (options.mode === 'lousa') { columns = Math.ceil(itemCount / 12); if (columns < 1) columns = 1; }
+                wrapper = document.createElement('div'); wrapper.style.position = 'fixed'; wrapper.style.left = '-9999px'; wrapper.style.top = '0'; wrapper.style.backgroundColor = '#1e293b'; wrapper.style.color = 'white'; wrapper.style.padding = '40px'; wrapper.style.zIndex = '99999';
+                let dateStr = new Date().toLocaleDateString('pt-BR'); if (options.date) { const [y, m, d] = options.date.split('-'); dateStr = `${d}/${m}/${y}`; }
+                const titleEl = document.createElement('h1'); titleEl.innerText = `${title} - ${dateStr}`; titleEl.style.textAlign = 'center'; titleEl.style.marginBottom = '25px'; titleEl.style.fontSize = '32px'; titleEl.style.fontWeight = 'bold'; titleEl.style.color = '#fbbf24'; titleEl.style.width = '100%'; wrapper.appendChild(titleEl);
                 clone = element.cloneNode(true);
+                const toHide = clone.querySelectorAll('.hide-on-print'); toHide.forEach(el => el.remove());
+                const toShow = clone.querySelectorAll('.show-on-print'); toShow.forEach(el => { el.classList.remove('hidden'); el.style.display = 'block'; });
+                const truncatedElements = clone.querySelectorAll('.truncate'); truncatedElements.forEach(el => { el.classList.remove('truncate'); el.style.overflow = 'visible'; el.style.textOverflow = 'clip'; el.style.whiteSpace = 'nowrap'; el.style.maxWidth = 'none'; el.style.width = 'auto'; });
+                const textElements = clone.querySelectorAll('.font-bold, .font-mono'); textElements.forEach(el => { const style = window.getComputedStyle(el); const fontSize = parseFloat(style.fontSize); if (fontSize) { el.style.fontSize = `${fontSize * 1.25}px`; } el.style.lineHeight = '1.4'; el.style.overflow = 'visible'; });
                 
-                const toHide = clone.querySelectorAll('.hide-on-print');
-                toHide.forEach(el => el.remove());
-
-                const toShow = clone.querySelectorAll('.show-on-print');
-                toShow.forEach(el => {
-                    el.classList.remove('hidden');
-                    el.style.display = 'block';
-                });
-
-                // --- CORREÇÃO DE CORTE DE NOMES (TRUNCATE) ---
-                // Removemos qualquer classe ou estilo que possa cortar o texto
-                const truncatedElements = clone.querySelectorAll('.truncate');
-                truncatedElements.forEach(el => {
-                    el.classList.remove('truncate');
-                    el.style.overflow = 'visible';
-                    el.style.textOverflow = 'clip';
-                    el.style.whiteSpace = 'nowrap'; // Mantém em uma linha, mas expande a largura
-                    el.style.maxWidth = 'none';
-                    el.style.width = 'auto';
-                });
-
-                const textElements = clone.querySelectorAll('.font-bold, .font-mono');
-                textElements.forEach(el => {
-                    const style = window.getComputedStyle(el);
-                    const fontSize = parseFloat(style.fontSize);
-                    if (fontSize) {
-                        el.style.fontSize = `${fontSize * 1.25}px`; 
-                    }
-                    // Garante que o texto não seja cortado verticalmente
-                    el.style.lineHeight = '1.4';
-                    el.style.overflow = 'visible';
-                });
-
-                // CORREÇÃO DE LAYOUT PARA PRINT
                 Array.from(clone.children).forEach(child => {
-                    child.style.display = 'flex';
-                    child.style.alignItems = 'center'; 
+                    child.style.display = 'flex'; child.style.alignItems = 'center'; 
+                    if (options.mode === 'madrugada') { child.style.justifyContent = 'flex-start'; child.style.gap = '20px'; } else { child.style.justifyContent = 'space-between'; }
+                    child.style.padding = '10px 15px'; child.style.height = 'auto'; child.style.minHeight = '50px'; child.style.overflow = 'visible';
+                    const innerFlexs = child.querySelectorAll('div.flex, .flex'); innerFlexs.forEach(g => { g.style.display = 'flex'; g.style.alignItems = 'center'; g.style.height = '100%'; g.style.overflow = 'visible'; });
                     
-                    // AJUSTE: Se for Madrugada, alinha à esquerda. Se não, mantém separado (space-between).
-                    if (options.mode === 'madrugada') {
-                        child.style.justifyContent = 'flex-start';
-                        child.style.gap = '20px'; // Espaço entre a vaga e o nome na madrugada
-                    } else {
-                        child.style.justifyContent = 'space-between';
-                    }
+                    // --- DEFINIÇÃO DE OFFSET CONDICIONAL ---
+                    const isMadrugada = options.mode === 'madrugada';
+                    const textOffset = isMadrugada ? '-13px' : '0px'; 
+                    const vagaTextOffset = isMadrugada ? '-10px' : '0px';
+                    const linePosition = '55%'; 
 
-                    child.style.padding = '10px 15px'; 
-                    child.style.height = 'auto';
-                    child.style.minHeight = '50px'; 
-                    child.style.overflow = 'visible'; // Permite que conteúdos passem do limite se precisar
-                    
-                    // Força alinhamento nos containers internos
-                    const innerFlexs = child.querySelectorAll('div.flex, .flex');
-                    innerFlexs.forEach(g => {
-                        g.style.display = 'flex';
-                        g.style.alignItems = 'center'; 
-                        g.style.height = '100%';
-                        g.style.overflow = 'visible';
-                    });
-
-                    // Correção específica para o quadrado do número da vaga
-                    // AJUSTE: Procura tanto rounded quanto rounded-full (Tabela Geral) para garantir que pegue em todas
                     const vagaBox = child.querySelector('.font-mono.rounded') || child.querySelector('.font-mono.rounded-full');
-                    
                     if (vagaBox) {
-                        vagaBox.style.padding = '0'; 
-                        vagaBox.style.display = 'flex';
-                        vagaBox.style.alignItems = 'center';
-                        vagaBox.style.justifyContent = 'center';
-                        
-                        // Aumenta o container para caber o número maior
-                        vagaBox.style.height = '40px'; 
-                        vagaBox.style.width = '45px'; 
-                        vagaBox.style.lineHeight = '1';
-                        
-                        // AJUSTE SOLICITADO: Fonte GRANDE e BOLD fixo para visualização fácil
-                        vagaBox.style.fontSize = '26px'; 
-                        vagaBox.style.fontWeight = '900'; // Extra Bold
-                        vagaBox.style.opacity = '1'; // Remove transparência se houver
-
-                        // 1. O QUADRADO FICA NO MESMO LUGAR
-                        vagaBox.style.marginTop = '0px'; 
-                        vagaBox.style.marginBottom = '0';
-
-                        // 2. AJUSTE DO NÚMERO (TEXTO)
-                        // Criamos um span interno para mover SÓ o número
-                        const originalText = vagaBox.textContent || vagaBox.innerText;
-                        vagaBox.textContent = ''; 
-                        
-                        const textSpan = document.createElement('span');
-                        textSpan.textContent = originalText;
-                        textSpan.style.position = 'relative';
-                        // Sobe 10px conforme solicitado (antes era 5px)
-                        textSpan.style.top = '-10px'; 
-                        
+                        vagaBox.style.padding = '0'; vagaBox.style.display = 'flex'; vagaBox.style.alignItems = 'center'; vagaBox.style.justifyContent = 'center'; vagaBox.style.height = '40px'; vagaBox.style.width = '45px'; vagaBox.style.lineHeight = '1'; 
+                        if (isMadrugada) { vagaBox.style.fontSize = '26px'; vagaBox.style.fontWeight = '900'; }
+                        vagaBox.style.opacity = '1'; 
+                        vagaBox.style.marginTop = '0px'; vagaBox.style.marginBottom = '0';
+                        const originalText = vagaBox.textContent || vagaBox.innerText; vagaBox.textContent = ''; 
+                        const textSpan = document.createElement('span'); textSpan.textContent = originalText; textSpan.style.position = 'relative'; textSpan.style.top = vagaTextOffset; 
                         vagaBox.appendChild(textSpan);
                     }
 
-                    // Correção para o Nome (evitar corte e alinhar risco)
                     const nameSpan = child.querySelector('span.font-bold');
                     if (nameSpan) {
-                        nameSpan.style.display = 'inline-block'; 
-                        nameSpan.style.lineHeight = '1.1'; 
-                        nameSpan.style.verticalAlign = 'middle';
-                        
-                        // AJUSTE: Fonte Aumentada para 26px
-                        nameSpan.style.fontSize = '26px';
-                        
-                        // AJUSTE: Sobe 10px (ficando em -15px para alinhar mais acima)
-                        nameSpan.style.position = 'relative';
-                        nameSpan.style.top = '-13px';
-                        nameSpan.style.marginTop = '0px'; 
-                        
-                        nameSpan.style.overflow = 'visible'; 
-                        
-                        // --- CORREÇÃO DEFINITIVA DO RISCADO ---
-                        // Substitui o text-decoration nativo por uma linha física (div)
+                        nameSpan.style.display = 'inline-block'; nameSpan.style.lineHeight = '1.1'; nameSpan.style.verticalAlign = 'middle';
+                        if (isMadrugada) { nameSpan.style.fontSize = '26px'; }
+                        nameSpan.style.position = 'relative'; nameSpan.style.top = textOffset; nameSpan.style.marginTop = '0px'; nameSpan.style.overflow = 'visible'; 
                         if (nameSpan.classList.contains('line-through') || nameSpan.style.textDecoration.includes('line-through')) {
-                            // Remove o riscado nativo bugado
-                            nameSpan.style.textDecoration = 'none';
-                            nameSpan.classList.remove('line-through');
-                            
-                            // Cria a linha manualmente
-                            const strikeLine = document.createElement('div');
-                            strikeLine.style.position = 'absolute';
-                            strikeLine.style.left = '-2px';   // Um pouco mais largo que o texto
-                            strikeLine.style.right = '-2px';
-                            
-                            // AJUSTE FINO: Mantém relativo ao centro do pai (+12px)
-                            // Como o pai subiu para -13px, a linha sobe junto visualmente
-                            strikeLine.style.top = 'calc(50% + 12px)';     
-                            
-                            strikeLine.style.height = '3px';  // Espessura do risco
-                            strikeLine.style.backgroundColor = '#f87171'; // Cor vermelha (red-400) para garantir visibilidade
-                            strikeLine.style.borderRadius = '2px';
-                            strikeLine.style.zIndex = '10';
-                            
-                            // Adiciona a linha dentro do nome
-                            nameSpan.appendChild(strikeLine);
-                            
-                            // Força opacidade visual de "item desativado"
-                            nameSpan.style.opacity = '0.7';
+                            nameSpan.style.textDecoration = 'none'; nameSpan.classList.remove('line-through');
+                            const strikeLine = document.createElement('div'); strikeLine.style.position = 'absolute'; strikeLine.style.left = '-2px'; strikeLine.style.right = '-2px'; strikeLine.style.top = linePosition; strikeLine.style.height = '3px'; strikeLine.style.backgroundColor = '#f87171'; strikeLine.style.borderRadius = '2px'; strikeLine.style.zIndex = '10';
+                            nameSpan.appendChild(strikeLine); nameSpan.style.opacity = '0.7';
                         }
                     }
 
-                    // AJUSTE: Correção para o Horário (Time) seguindo o mesmo padrão do Nome
                     const timeSpan = child.querySelector('span.font-mono.text-lg') || child.querySelector('.show-on-print span');
                     if (timeSpan) {
-                        timeSpan.style.display = 'inline-block';
-                        timeSpan.style.lineHeight = '1.1';
-                        timeSpan.style.verticalAlign = 'middle';
-                        
-                        // AJUSTE: Fonte Aumentada para 26px
-                        timeSpan.style.fontSize = '26px';
-
-                        // AJUSTE: Sobe 10px (ficando em -15px)
-                        timeSpan.style.position = 'relative';
-                        timeSpan.style.top = '-13px';
-                        timeSpan.style.marginTop = '0px'; 
-                        
-                        timeSpan.style.overflow = 'visible';
-
-                        // Se estiver riscado, aplicamos a linha manual
+                        timeSpan.style.display = 'inline-block'; timeSpan.style.lineHeight = '1.1'; timeSpan.style.verticalAlign = 'middle';
+                        if (isMadrugada) { timeSpan.style.fontSize = '26px'; }
+                        timeSpan.style.position = 'relative'; timeSpan.style.top = textOffset; timeSpan.style.marginTop = '0px'; timeSpan.style.overflow = 'visible';
                         if (timeSpan.classList.contains('line-through') || timeSpan.style.textDecoration.includes('line-through')) {
-                            timeSpan.style.textDecoration = 'none';
-                            timeSpan.classList.remove('line-through');
-                            
-                            const strikeLine = document.createElement('div');
-                            strikeLine.style.position = 'absolute';
-                            strikeLine.style.left = '-2px';
-                            strikeLine.style.right = '-2px';
-                            
-                            // Mantém relativo (+12px)
-                            strikeLine.style.top = 'calc(50% + 12px)';     
-                            
-                            strikeLine.style.height = '3px';
-                            strikeLine.style.backgroundColor = '#f87171'; // Vermelho
-                            strikeLine.style.borderRadius = '2px';
-                            strikeLine.style.zIndex = '10';
-                            
-                            timeSpan.appendChild(strikeLine);
-                            
-                            timeSpan.style.opacity = '0.7';
+                            timeSpan.style.textDecoration = 'none'; timeSpan.classList.remove('line-through');
+                            const strikeLine = document.createElement('div'); strikeLine.style.position = 'absolute'; strikeLine.style.left = '-2px'; strikeLine.style.right = '-2px'; strikeLine.style.top = linePosition; strikeLine.style.height = '3px'; strikeLine.style.backgroundColor = '#f87171'; strikeLine.style.borderRadius = '2px'; strikeLine.style.zIndex = '10';
+                            timeSpan.appendChild(strikeLine); timeSpan.style.opacity = '0.7';
                         }
                     }
                 });
                 
                 clone.style.width = '100%';
-                clone.style.height = 'auto';
-                clone.style.display = 'block';
-
-                const contentContainer = document.createElement('div');
-                if (columns > 1) {
-                    const colWidth = 600; // Aumentei a largura da coluna para dar mais espaço aos nomes
-                    wrapper.style.width = `${columns * colWidth + 80}px`; 
-                    contentContainer.style.columnCount = columns.toString();
-                    contentContainer.style.columnGap = '40px';
-                    
-                    Array.from(clone.children).forEach(child => {
-                        child.style.breakInside = 'avoid';
-                        child.style.pageBreakInside = 'avoid';
-                        child.style.marginBottom = '15px';
-                    });
-                } else {
-                    // Largura dinâmica baseada no conteúdo, com mínimo seguro
-                    wrapper.style.width = `${Math.max(element.scrollWidth + 100, 700)}px`;
-                }
-
-                contentContainer.appendChild(clone);
-                wrapper.appendChild(contentContainer);
-                
-                document.body.appendChild(wrapper);
-                target = wrapper;
-
-                const canvas = await html2canvas(target, {
-                    backgroundColor: '#1e293b',
-                    scale: 2,
-                    useCORS: true,
-                    windowWidth: target.scrollWidth,
-                    width: target.scrollWidth,
-                    height: target.scrollHeight + 50 // Garante altura extra no canvas
-                });
-
-                const link = document.createElement('a');
-                link.download = `${filename}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.png`;
-                link.href = canvas.toDataURL();
-                link.click();
-
-                if (wrapper) document.body.removeChild(wrapper);
-
-            } catch (err) {
-                console.error("Erro no print:", err);
-                alert("Erro ao gerar imagem.");
-            } finally {
-                if(activeBtn) {
-                    activeBtn.innerHTML = originalHTML;
-                    activeBtn.disabled = false;
-                }
-            }
+                if (columns > 1) { target = document.createElement('div'); target.style.display = 'grid'; target.style.gridTemplateColumns = `repeat(${columns}, 1fr)`; target.style.gap = '15px'; target.style.width = '100%'; Array.from(clone.children).forEach(child => target.appendChild(child)); } else { target = clone; }
+                wrapper.appendChild(target); document.body.appendChild(wrapper);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const canvas = await html2canvas(wrapper, { backgroundColor: '#1e293b', scale: 2 });
+                const link = document.createElement('a'); link.download = `${filename}.png`; link.href = canvas.toDataURL('image/png'); link.click();
+                document.body.removeChild(wrapper);
+            } catch (error) { console.error("Erro print:", error); alert("Erro ao gerar imagem."); } finally { if(activeBtn) { activeBtn.innerText = originalHTML; activeBtn.disabled = false; } }
         };
 
         /* --- COMPONENTS --- */
@@ -1154,6 +832,141 @@
             );
         };
 
+        /* --- CSS ANIMATIONS (ADICIONAR NO HEAD/STYLE OU AQUI NO COMPONENTE) --- */
+        const VanStyles = () => (
+            <style>{`
+                @keyframes road-move {
+                    from { background-position: 0px 0; }
+                    to { background-position: -60px 0; }
+                }
+                @keyframes wheel-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                @keyframes van-bounce {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(-3px); }
+                }
+                @keyframes clouds-move {
+                    from { transform: translateX(100%); }
+                    to { transform: translateX(-100%); }
+                }
+                .road-animated {
+                    background-image: linear-gradient(90deg, transparent 50%, rgba(255,255,255,0.5) 50%);
+                    background-size: 60px 100%;
+                    animation: road-move 1s linear infinite;
+                }
+                .wheel-animated {
+                    animation: wheel-spin 0.5s linear infinite;
+                }
+                .van-body-animated {
+                    animation: van-bounce 1s ease-in-out infinite;
+                }
+            `}</style>
+        );
+
+        /* --- VAN SCENE COMPONENT --- */
+        const VanScene = ({ isNight, isTyping, isSuccess }) => {
+            return (
+                <div className={`relative w-full h-48 rounded-t-3xl overflow-hidden transition-all duration-1000 ${isNight ? 'bg-[#0f172a]' : 'bg-[#38bdf8]'} border-b-4 border-[#334155]`}>
+                    <VanStyles />
+                    
+                    {/* CÉU (SOL / LUA) */}
+                    <div 
+                        className={`absolute top-6 right-8 w-16 h-16 rounded-full transition-all duration-1000 ease-in-out ${isNight ? 'bg-slate-200 shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'bg-yellow-400 shadow-[0_0_40px_rgba(253,224,71,0.6)]'}`}
+                        style={{ transform: isNight ? 'translateY(0)' : 'translateY(10px)' }}
+                    >
+                        {isNight && <div className="absolute top-3 right-4 w-4 h-4 bg-slate-300 rounded-full opacity-40"></div>}
+                    </div>
+
+                    {/* NUVENS (Apenas Dia) */}
+                    <div className={`absolute top-10 left-0 right-0 h-20 transition-opacity duration-1000 ${isNight ? 'opacity-10' : 'opacity-60'}`}>
+                        <div className="absolute top-2 left-10 w-20 h-6 bg-white rounded-full blur-md opacity-80" style={{animation: 'clouds-move 20s linear infinite'}}></div>
+                        <div className="absolute top-8 right-20 w-32 h-8 bg-white rounded-full blur-md opacity-60" style={{animation: 'clouds-move 35s linear infinite'}}></div>
+                    </div>
+
+                    {/* ESTRELAS (Apenas Noite) */}
+                    <div className={`absolute inset-0 transition-opacity duration-1000 ${isNight ? 'opacity-100' : 'opacity-0'}`}>
+                        <div className="absolute top-4 left-10 w-1 h-1 bg-white rounded-full animate-pulse"></div>
+                        <div className="absolute top-12 left-1/3 w-1 h-1 bg-white rounded-full animate-pulse" style={{animationDelay:'0.5s'}}></div>
+                        <div className="absolute top-8 right-1/3 w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{animationDelay:'1s'}}></div>
+                    </div>
+
+                    {/* CIDADE/PAISAGEM AO FUNDO */}
+                    <div className={`absolute bottom-16 left-0 right-0 h-12 flex items-end opacity-30 transition-colors duration-1000 ${isNight ? 'text-slate-800' : 'text-emerald-800'}`}>
+                        {/* Prédios/Montanhas simplificados */}
+                        <div className="w-10 h-8 bg-current mx-1"></div>
+                        <div className="w-14 h-12 bg-current mx-1"></div>
+                        <div className="w-8 h-6 bg-current mx-1"></div>
+                        <div className="w-16 h-10 bg-current mx-1"></div>
+                        <div className="w-12 h-14 bg-current mx-1"></div>
+                        <div className="w-20 h-5 bg-current mx-1"></div>
+                        <div className="flex-1"></div>
+                    </div>
+
+                    {/* ESTRADA */}
+                    <div className="absolute bottom-0 w-full h-16 bg-[#334155] flex items-center overflow-hidden">
+                        {/* Faixa Pontilhada */}
+                        <div 
+                            className="w-full h-2 road-animated" 
+                            style={{ 
+                                animationDuration: isSuccess ? '0.2s' : (isTyping ? '0.5s' : '1s') 
+                            }}
+                        ></div>
+                    </div>
+
+                    {/* A VAN */}
+                    <div 
+                        className={`absolute bottom-4 left-1/2 transition-all duration-1000 ease-in-out`}
+                        style={{ 
+                            transform: isSuccess ? 'translateX(200vw)' : 'translateX(-50%)', // Sai da tela ao logar
+                            filter: isNight ? 'brightness(0.9)' : 'brightness(1)'
+                        }}
+                    >
+                        {/* Container da Animação de Pulo */}
+                        <div className="van-body-animated" style={{ animationDuration: isTyping ? '0.3s' : '1s' }}>
+                            
+                            {/* Faróis (Feixe de Luz) - Só a noite */}
+                            <div 
+                                className={`absolute top-8 right-[-100px] w-32 h-12 bg-gradient-to-r from-yellow-200/50 to-transparent transform -rotate-12 rounded-l-full transition-opacity duration-500 pointer-events-none ${isNight ? 'opacity-100' : 'opacity-0'}`}
+                                style={{ filter: 'blur(8px)' }}
+                            ></div>
+
+                            {/* Carroceria */}
+                            <div className="w-48 h-24 bg-amber-600 rounded-2xl rounded-tr-[3rem] relative shadow-lg border-b-4 border-amber-800 z-10">
+                                {/* Janela */}
+                                <div className="absolute top-2 right-4 w-16 h-10 bg-[#bfdbfe] rounded-tr-[2rem] rounded-bl-lg border-2 border-amber-700/50 overflow-hidden">
+                                    {/* Reflexo vidro */}
+                                    <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-bl from-white/40 to-transparent"></div>
+                                </div>
+                                <div className="absolute top-2 right-24 w-12 h-10 bg-[#bfdbfe] rounded-lg border-2 border-amber-700/50"></div>
+
+                                {/* Faixa Lateral */}
+                                <div className="absolute top-14 left-0 w-full h-3 bg-amber-700/30"></div>
+                                
+                                {/* Logo Lateral */}
+                                <div className="absolute top-14 left-6 text-[10px] font-bold text-amber-900 opacity-60 tracking-widest uppercase">Bora de Van</div>
+
+                                {/* Farol */}
+                                <div className={`absolute top-10 -right-1 w-3 h-6 rounded-r-lg border border-amber-800 transition-colors duration-500 ${isNight ? 'bg-yellow-200 shadow-[0_0_15px_rgba(253,224,71,0.8)]' : 'bg-yellow-100'}`}></div>
+                                
+                                {/* Lanterna Traseira */}
+                                <div className="absolute top-10 -left-1 w-2 h-6 bg-red-500 rounded-l-lg border border-amber-800"></div>
+                            </div>
+
+                            {/* Rodas */}
+                            <div className="absolute -bottom-4 left-6 w-12 h-12 bg-[#1e293b] rounded-full border-4 border-[#334155] flex items-center justify-center shadow-lg z-20">
+                                <div className="w-6 h-6 border-2 border-dashed border-gray-400 rounded-full wheel-animated" style={{ animationDuration: isSuccess ? '0.1s' : (isTyping ? '0.2s' : '0.5s') }}></div>
+                            </div>
+                            <div className="absolute -bottom-4 right-8 w-12 h-12 bg-[#1e293b] rounded-full border-4 border-[#334155] flex items-center justify-center shadow-lg z-20">
+                                <div className="w-6 h-6 border-2 border-dashed border-gray-400 rounded-full wheel-animated" style={{ animationDuration: isSuccess ? '0.1s' : (isTyping ? '0.2s' : '0.5s') }}></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         /* --- LOGIN SCREEN --- */
         const LoginScreen = ({ onLogin }) => {
             const [username, setUsername] = useState('');
@@ -1161,24 +974,26 @@
             const [loading, setLoading] = useState(false);
             const [success, setSuccess] = useState(false);
             const [geoStatus, setGeoStatus] = useState('');
+            
+            // Estado para a Cena
+            const [activeField, setActiveField] = useState('user'); 
+            const [inputValue, setInputValue] = useState('');
+            const isTyping = inputValue.length > 0;
 
             const handleLoginClick = () => {
                 if(!username || !password) return alert("Preencha usuário e senha");
-                
                 setLoading(true);
                 setGeoStatus('Verificando segurança...');
 
                 const proceedLogin = (coords) => {
-                    // Em vez de chamar onLogin direto, inicia a animação
                     setTimeout(() => {
-                        setSuccess(true); // Dispara a animação de sucesso
+                        setSuccess(true); 
                         setTimeout(() => {
                             onLogin(username, password, coords);
-                        }, 800); // Espera a animação de expansão acontecer
-                    }, 500); // Delay simulado para "processamento"
+                        }, 1200); // Tempo para a van sair da tela
+                    }, 500); 
                 };
 
-                // Validação Local antes de tudo
                 if (!USERS_DB[username] || USERS_DB[username].pass !== password) {
                     setLoading(false);
                     return alert('Usuário ou senha incorretos.');
@@ -1207,43 +1022,59 @@
                     {/* Layer de Introdução Animada */}
                     <div className={`intro-layer ${success ? 'active' : ''}`}></div>
 
-                    <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center login-bg p-6 text-white transition-opacity duration-500 ${success ? 'opacity-0' : 'opacity-100'}`}>
-                        <div className="mb-8 flex flex-col items-center">
-                            <div className="w-24 h-24 bg-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-2xl logo-bounce">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><line x1="16" y1="8" x2="20" y2="8"/><path d="M16 8h4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                            </div>
-                            <h1 className="text-4xl font-bold mb-2 tracking-tight">Bora de Van</h1>
-                            <p className="opacity-60 text-sm font-medium tracking-wide">GESTÃO DE TRANSPORTE PREMIUM</p>
-                        </div>
-                        <div className="w-full max-w-sm space-y-5 bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl stagger-in d-1">
-                            <Input 
-                                theme={{text: 'text-white', radius: 'rounded-2xl'}} 
-                                label="Usuário" 
-                                value={username} 
-                                onChange={e => setUsername(e.target.value)} 
-                            />
-                            <Input 
-                                theme={{text: 'text-white', radius: 'rounded-2xl'}} 
-                                label="Senha" 
-                                type="password" 
-                                value={password} 
-                                onChange={e => setPassword(e.target.value)} 
-                            />
+                    <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center login-bg p-4 text-white transition-opacity duration-500 ${success ? 'opacity-0' : 'opacity-100'}`}>
+                        
+                        {/* Container Principal do Login */}
+                        <div className="w-full max-w-sm bg-[#1e293b] rounded-3xl shadow-2xl overflow-hidden border border-white/10 relative z-20">
                             
-                            {geoStatus && <p className="text-xs text-center text-amber-400 animate-pulse">{geoStatus}</p>}
+                            {/* CENA ANIMADA NO TOPO */}
+                            <VanScene 
+                                isNight={activeField === 'password'} 
+                                isTyping={isTyping} 
+                                isSuccess={success} 
+                            />
 
-                            <button 
-                                onClick={handleLoginClick}
-                                disabled={loading}
-                                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-orange-500/20 transition-all flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-[0.98]"
-                            >
-                                {loading ? (
-                                    <><div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"/> Acessando...</>
-                                ) : (
-                                    <>Entrar <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></>
-                                )}
-                            </button>
+                            <div className="p-8 pt-6 space-y-5">
+                                <div className="text-center mb-6">
+                                    <h1 className="text-3xl font-bold mb-1 tracking-tight text-white">Bora de Van</h1>
+                                    <p className="opacity-50 text-xs font-bold tracking-widest uppercase">Sistema de Gestão</p>
+                                </div>
+
+                                <Input 
+                                    theme={{text: 'text-white', radius: 'rounded-xl'}} 
+                                    label="Usuário" 
+                                    value={username} 
+                                    onFocus={() => { setActiveField('user'); setInputValue(username); }}
+                                    onChange={e => { setUsername(e.target.value); setInputValue(e.target.value); }} 
+                                    placeholder="Seu usuário"
+                                />
+                                <Input 
+                                    theme={{text: 'text-white', radius: 'rounded-xl'}} 
+                                    label="Senha" 
+                                    type="password" 
+                                    value={password} 
+                                    onFocus={() => { setActiveField('password'); setInputValue(password); }}
+                                    onChange={e => { setPassword(e.target.value); setInputValue(e.target.value); }} 
+                                    placeholder="Sua senha"
+                                />
+                                
+                                {geoStatus && <p className="text-xs text-center text-amber-400 animate-pulse">{geoStatus}</p>}
+
+                                <button 
+                                    onClick={handleLoginClick}
+                                    disabled={loading}
+                                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4 active:scale-[0.98]"
+                                >
+                                    {loading ? (
+                                        <><div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"/> Iniciando...</>
+                                    ) : (
+                                        <>Entrar <Icons.ChevronRight size={20}/></>
+                                    )}
+                                </button>
+                            </div>
                         </div>
+                        
+                        <p className="mt-8 text-xs opacity-30">© 2025 NexFlow Technology</p>
                     </div>
                 </>
             );
