@@ -2274,6 +2274,38 @@
                 }
             }
 
+            /* --- GLOBAL MENU SWIPE (NOVO) --- */
+            const globalTouchRef = useRef({ x: 0, y: 0 });
+
+            const handleGlobalTouchStart = (e) => {
+                // Bloqueia se estiver na tabela (já tem swipe próprio) ou se o menu já estiver aberto
+                if (view === 'table' || menuOpen) return;
+                
+                // Salva a posição inicial do toque
+                globalTouchRef.current = { 
+                    x: e.touches[0].clientX, 
+                    y: e.touches[0].clientY 
+                };
+            };
+
+            const handleGlobalTouchEnd = (e) => {
+                // Bloqueia na tabela, se estiver arrastando item ou menu já aberto
+                if (view === 'table' || draggedItem || menuOpen) return;
+                
+                const endX = e.changedTouches[0].clientX;
+                const endY = e.changedTouches[0].clientY;
+                
+                const diffX = endX - globalTouchRef.current.x;
+                const diffY = Math.abs(endY - globalTouchRef.current.y);
+
+                // Lógica: 
+                // 1. Arraste horizontal para direita > 80px
+                // 2. Movimento vertical pequeno (< 60px) para não confundir com scroll
+                if (diffX > 80 && diffY < 60) {
+                    setMenuOpen(true);
+                }
+            };
+
 
             /* AI FUNCTIONS */
             const handleSmartCreate = async () => {
@@ -2376,12 +2408,18 @@
             };
 
             const addById = () => {
-                const term = searchId.toString(); const tripDate = formData.date || suggestedTrip.date; const tripTime = formData.time || suggestedTrip.time;
+                // CORREÇÃO: Verifica se há texto digitado antes de buscar
+                const term = searchId.toString().trim();
+                if (!term) return alert("Digite um ID ou Nome para adicionar.");
+
+                const tripDate = formData.date || suggestedTrip.date; const tripTime = formData.time || suggestedTrip.time;
                 const p = data.passengers.find(x => (x.id && x.id === term) || (x.name && x.name.toLowerCase().includes(term.toLowerCase())));
+                
                 if(!p) return alert('Não encontrado');
                 if(isBusy(p.id, tripDate, tripTime)) return alert(`Passageiro já em viagem`);
                 if(suggestedTrip.passengers.find(x=>x.id==p.id)) return alert('Já na lista');
                 if(suggestedTrip.occupancy + parseInt(p.passengerCount) > suggestedTrip.driver.capacity) return alert('Sem vaga');
+                
                 const nw = [...suggestedTrip.passengers, p].sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
                 setSuggestedTrip({...suggestedTrip, passengers: nw, occupancy: suggestedTrip.occupancy + parseInt(p.passengerCount)});
                 setSearchId('');
@@ -2727,7 +2765,12 @@
             };
 
             return (
-                <div className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}>
+                <div 
+                    className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}
+                    // Adicionados os listeners globais de touch aqui
+                    onTouchStart={handleGlobalTouchStart}
+                    onTouchEnd={handleGlobalTouchEnd}
+                >
                     {/* ADICIONADO ID 'mobile-sidebar' PARA O TOUR ENCONTRAR */}
                     {menuOpen && <div className="fixed inset-0 z-50 flex"><div id="mobile-sidebar" className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} id={`menu-btn-${x.id}`} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
                     
@@ -3023,10 +3066,26 @@
                                                                             <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.luggageCount || 0}🎒</div>
                                                                             <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.passengerCount}p</div>
                                                                             
+                                                                            {/* BOTÃO ATUALIZADO: ABRE MODAL DE REAGENDAMENTO (SEM ERRO DE SYNTAX) */}
                                                                             <button 
-                                                                                onClick={() => clearPaxSchedule(p.id)} 
-                                                                                className="ml-1 p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                                                                                title="Remover Agendamento (Limpar Horário)"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setFormData({ id: p.id, time: p.time, name: p.name });
+                                                                                    setModal('reschedule');
+                                                                                }}
+                                                                                className="ml-1 p-1.5 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors active:scale-95 cursor-pointer"
+                                                                                title="Reagendar Passageiro"
+                                                                            >
+                                                                                <Icons.Clock size={16} />
+                                                                            </button>
+
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    clearPaxSchedule(p.id);
+                                                                                }} 
+                                                                                className="ml-1 p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors active:scale-95 cursor-pointer"
+                                                                                title="Remover Agendamento"
                                                                             >
                                                                                 <Icons.CalendarX size={16} />
                                                                             </button>
@@ -3078,7 +3137,14 @@
                                                             <div className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg flex items-center gap-1">
                                                                 <span>Temporária (Auto)</span>
                                                                 <span className="w-[1px] h-3 bg-yellow-500/30 mx-1"></span>
-                                                                <span className="flex items-center gap-1"><Icons.Clock size={10}/> <TempTripTimer date={t.date} time={t.time} /></span>
+                                                                {/* Timer agora é clicável para abrir edição */}
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); openEditTrip(t); }}
+                                                                    className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                                                                    title="Clique para editar o horário"
+                                                                >
+                                                                    <Icons.Clock size={10}/> <TempTripTimer date={t.date} time={t.time} />
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     )}
@@ -3295,11 +3361,66 @@
                     {modal && (
                         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-4">
                             <div className={`${theme.card} w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-xl rounded-t-3xl md:rounded-2xl border ${theme.border} shadow-2xl flex flex-col page-transition`}>
-                                <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 shrink-0"><h2 className="text-xl font-bold">{modal==='trip'?'Criar Viagem':modal==='passenger'?'Passageiro':modal==='driver'?'Motorista':'Perdido & Achado'}</h2><button onClick={()=>setModal(null)} className="opacity-50"><Icons.X size={24}/></button></div>
+                                <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 shrink-0">
+                                    {/* TÍTULO ATUALIZADO */}
+                                    <h2 className="text-xl font-bold">
+                                        {modal==='trip'?'Criar Viagem':
+                                         modal==='passenger'?'Passageiro':
+                                         modal==='driver'?'Motorista':
+                                         modal==='lostFound'?'Perdido & Achado':
+                                         modal==='reschedule'?'Reagendar': // Novo Título
+                                         modal==='madrugadaVaga'?'Vaga Madrugada':
+                                         modal==='madrugadaBlock'?'Bloquear Vaga':''}
+                                    </h2>
+                                    <button onClick={()=>setModal(null)} className="opacity-50"><Icons.X size={24}/></button>
+                                </div>
                                 <div className="flex-1 scroll-y p-6 space-y-5 pb-10">
-                                    <Input themeKey={themeKey} label="Data" type="date" value={formData.date || getTodayDate()} onChange={e=>setFormData({...formData, date:e.target.value})} />
+                                    {/* Campo de Data (Oculto no Reschedule) */}
+                                    <div className={modal === 'reschedule' ? 'hidden' : ''}>
+                                        <Input themeKey={themeKey} label="Data" type="date" value={formData.date || getTodayDate()} onChange={e=>setFormData({...formData, date:e.target.value})} />
+                                    </div>
+                                    
                                     {modal === 'passenger' && (<><Input themeKey={themeKey} label="Nome" value={formData.name||''} onChange={e=>setFormData({...formData, name:e.target.value})} /><Input themeKey={themeKey} label="Telefone" type="tel" value={formData.phone||''} onChange={e=>setFormData({...formData, phone:e.target.value})} /><Input themeKey={themeKey} label="Endereço" value={formData.address||''} onChange={e=>setFormData({...formData, address:e.target.value})} /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Bairro</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.neighborhood} onChange={e=>setFormData({...formData, neighborhood:e.target.value})}>{BAIRROS.map(b=><option key={b} value={b} className="bg-slate-900">{b}</option>)}</select></div><Input themeKey={themeKey} label="Referência" value={formData.reference||''} onChange={e=>setFormData({...formData, reference:e.target.value})} /><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="Horário (ex: 17:30)" type="time" value={formData.time||''} onChange={e=>setFormData({...formData, time:e.target.value})} /><Input themeKey={themeKey} label="Qtd Pax" type="number" value={formData.passengerCount||''} onChange={e=>setFormData({...formData, passengerCount:e.target.value})} /></div><Input themeKey={themeKey} label="Qtd Malas" type="number" value={formData.luggageCount||''} onChange={e=>setFormData({...formData, luggageCount:e.target.value})} /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Etiquetas (Tags)</label><input className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 w-full outline-none focus:border-current transition-colors" placeholder="Ex: Criança, Pagamento Mensal..." value={formData.tags||''} onChange={e=>setFormData({...formData, tags:e.target.value})} /></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Pagamento</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.payment} onChange={e=>setFormData({...formData, payment:e.target.value})}>{['Dinheiro','Pix','Cartão'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Ativo','Inativo'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('passengers')}>Salvar</Button></div></>)}
                                     {modal === 'driver' && (<><Input themeKey={themeKey} label="Nome" value={formData.name||''} onChange={e=>setFormData({...formData, name:e.target.value})} /><Input themeKey={themeKey} label="Telefone" type="tel" value={formData.phone||''} onChange={e=>setFormData({...formData, phone:e.target.value})} /><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="Placa" value={formData.plate||''} onChange={e=>setFormData({...formData, plate:e.target.value})} /><Input themeKey={themeKey} label="Capacidade" type="number" value={formData.capacity||''} onChange={e=>setFormData({...formData, capacity:e.target.value})} /></div><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="CNH" value={formData.cnh||''} onChange={e=>setFormData({...formData, cnh:e.target.value})} /><Input themeKey={themeKey} label="Validade CNH" type="date" value={formData.cnhValidity||''} onChange={e=>setFormData({...formData, cnhValidity:e.target.value})} /></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Ativo','Inativo'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('drivers')}>Salvar</Button></div></>)}
+                                    
+                                    {/* NOVO MODAL: REAGENDAR */}
+                                    {modal === 'reschedule' && (
+                                        <div className="space-y-6 anim-fade">
+                                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-200 flex items-center gap-3">
+                                                <Icons.Clock size={20} className="shrink-0"/>
+                                                <div>
+                                                    Defina o novo horário para <span className="font-bold text-white text-base block">{formData.name}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="py-2">
+                                                <Input 
+                                                    themeKey={themeKey} 
+                                                    label="Novo Horário" 
+                                                    type="time" 
+                                                    value={formData.time || ''} 
+                                                    onChange={e => setFormData({...formData, time: e.target.value})} 
+                                                    autoFocus
+                                                />
+                                            </div>
+
+                                            <div className="pt-2 grid grid-cols-2 gap-3">
+                                                <Button themeKey={themeKey} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button>
+                                                <Button 
+                                                    themeKey={themeKey} 
+                                                    onClick={() => {
+                                                        if(!formData.time) return alert("Por favor, defina um horário.");
+                                                        dbOp('update', 'passengers', { id: formData.id, time: formData.time });
+                                                        setModal(null);
+                                                    }} 
+                                                    icon={Icons.Check}
+                                                >
+                                                    Salvar
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {modal === 'madrugadaVaga' && (
                                         <div className="space-y-6">
                                             <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm text-yellow-200">
