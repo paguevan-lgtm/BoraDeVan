@@ -1706,11 +1706,10 @@
                     // Lousa
                     let lousaIndex = 0;
                     lousaOrder.forEach(item => {
-                        if (!item.riscado) {
+                        // AJUSTE: Ignora 'riscado' E 'baixou' para o cálculo de tempo (assim como na visualização)
+                        if (!item.riscado && !item.baixou) {
                             const t = new Date(startLousaTime.getTime() + lousaIndex * 30 * 60000);
                             const timeStr = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-                            // Se a vaga já estiver no map (ex: confirmada), a Lousa atualiza o horário ou mantém?
-                            // Geralmente Lousa é fila, então vamos garantir que processamos.
                             activeSlotsMap.set(item.vaga, { vaga: item.vaga, time: timeStr });
                             lousaIndex++;
                         }
@@ -1719,9 +1718,7 @@
                     const activeSlots = Array.from(activeSlotsMap.values());
 
                     // Prepara para calcular IDs sequenciais
-                    // Pega o maior ID atual estritamente numérico para começar a contagem correta
                     let currentMaxId = data.trips.reduce((max, t) => {
-                        // Garante que só pegamos IDs puramente numéricos para evitar erros com IDs antigos "temp_"
                         if (t.id && /^\d+$/.test(t.id)) {
                             const idNum = parseInt(t.id);
                             return Math.max(max, idNum);
@@ -1741,29 +1738,26 @@
                         // Ajuste para virada de dia se necessário
                         if (now.getHours() < 5 && h > 20) slotDate.setDate(slotDate.getDate() - 1);
                         else if (now.getHours() > 20 && h < 5) slotDate.setDate(slotDate.getDate() + 1);
+                            
                             const diffMinutes = (now - slotDate) / 60000;
 
                             // Formata a data correta do slot para salvar (YYYY-MM-DD)
-                            // Isso corrige bugs de timer na virada do dia (ex: 23:50 vs 00:10)
                             const slotDateStr = [
                                 slotDate.getFullYear(),
                                 String(slotDate.getMonth() + 1).padStart(2, '0'),
                                 String(slotDate.getDate()).padStart(2, '0')
                             ].join('-');
 
-                            // Encontrar motorista no banco
+                            // Encontrar motorista no banco (CORREÇÃO: CASE INSENSITIVE)
                             const driverSp = spList.find(d => d.vaga === slot.vaga);
-                            const driverDb = driverSp ? data.drivers.find(d => d.name === driverSp.name) : null;
+                            const driverDb = driverSp ? data.drivers.find(d => d.name.toLowerCase() === driverSp.name.toLowerCase()) : null;
                             
                             if (!driverDb) return;
 
-                            // AJUSTE CRÍTICO:
-                            // Calcula o horário da viagem ANTES da verificação (Slot + 60min)
+                            // AJUSTE: Calcula o horário da viagem (Slot + 60min)
                             const tripTime = addMinutes(slot.time, 60);
 
-                            // TRAVA DE SEGURANÇA ATUALIZADA:
-                            // Verifica se já existe registro de viagem para este motorista, dia e horário (Qualquer Status)
-                            // Isso impede que uma viagem cancelada/finalizada seja recriada automaticamente pelo sistema.
+                            // TRAVA DE SEGURANÇA: Verifica se já existe registro
                             const tripAlreadyExists = data.trips.some(t => 
                                 t.driverId === driverDb.id && 
                                 t.date === slotDateStr &&
@@ -1772,22 +1766,21 @@
 
                             if (tripAlreadyExists) return;
 
-                            // A) CRIAÇÃO: Se estamos no horário (0 a 45min) e não tem viagem -> Criar Temp
-                            // A criação continua baseada no Slot Original (08:00)
-                            if (diffMinutes >= 0 && diffMinutes <= 45) {
+                            // A) CRIAÇÃO: Janela expandida para -30min (cria antes do horário) até 45min
+                            if (diffMinutes >= -30 && diffMinutes <= 45) {
                                 // Incrementa o ID baseado no último maior encontrado
                                 currentMaxId++;
                                 const nextId = currentMaxId.toString();
 
                                 const newTrip = {
-                                    id: nextId, // ID Numérico Sequencial
+                                    id: nextId, 
                                     driverId: driverDb.id,
                                     driverName: driverDb.name,
-                                    time: tripTime, // Usa o horário já calculado (+60min)
+                                    time: tripTime, 
                                     date: slotDateStr, 
                                     passengerIds: [],
                                     status: 'Em andamento',
-                                    isTemp: true // Flag de Viagem Temporária
+                                    isTemp: true 
                                 };
                                 db.ref('trips').child(newTrip.id).set(newTrip);
                             }
@@ -1807,16 +1800,12 @@
                             // Diff agora é baseado no horário VISUAL da viagem (Ex: 09:00).
                             const diff = (now - tripDate) / 60000;
                             
-                            // AJUSTE: Verifica se a vaga ainda existe na tabela
+                            // AJUSTE: Verifica se a vaga ainda existe na tabela (Case Insensitive)
                             const isActiveSlot = activeSlots.some(s => s.vaga && addMinutes(s.time, 60) === t.time && (
-                                spList.find(d => d.vaga === s.vaga)?.name === t.driverName
+                                spList.find(d => d.vaga === s.vaga)?.name.toLowerCase() === t.driverName.toLowerCase()
                             ));
                             
-                            // AJUSTE DELEÇÃO:
-                            // Queremos deletar quando o Slot Original (08:00) passar de 45min (08:45).
-                            // A viagem visual é 09:00.
-                            // 08:45 - 09:00 = -15 minutos.
-                            // Portanto, deletamos se diff > -15.
+                            // DELEÇÃO: Remove se expirou ou se a vaga sumiu da tabela
                             if (diff > -15 || (!isActiveSlot && diff > -59)) {
                                 db.ref('trips').child(t.id).remove();
                             }
@@ -1825,7 +1814,8 @@
                 };
 
                 manageTempTrips();
-            }, [uiTicker, data.trips, tableStatus, lousaOrder, spList, data.drivers]);
+            // CORREÇÃO: Adicionado currentOpDate na dependência
+            }, [uiTicker, data.trips, tableStatus, lousaOrder, spList, data.drivers, currentOpDate]);
 
             // Helper para verificar se passou 30 min
             const isTimeExpired = (timeStr) => {
