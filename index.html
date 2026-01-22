@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Bora de Van - Gestão 🚐</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- HTML2Canvas (Para Prints) -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        html, body {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100dvh;
+            background-color: #0f172a; color: #e2e8f0;
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            position: fixed; inset: 0; overflow: hidden;
+        }
+
+        #root { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+        /* Loader */
+        #loader { position: fixed; inset: 0; z-index: 9999; background: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top: 4px solid #f59e0b; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* AI Animations */
+        .bg-ai { background: linear-gradient(135deg, #f59e0b, #d97706, #b45309); background-size: 200% 200%; animation: ai-pulse 3s ease infinite; }
+        @keyframes ai-pulse { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
+
+        .listening { 
+            background-color: #ef4444 !important; 
+            color: white !important; 
+            border-color: #ef4444 !important; 
+            animation: pulse-mic 1.5s infinite;
+        }
+        @keyframes pulse-mic { 
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); transform: scale(1); } 
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); transform: scale(1.05); } 
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); transform: scale(1); } 
+        }
+
+        /* Drag & Drop Styles */
+        .draggable-item { cursor: grab; touch-action: pan-y; user-select: none; -webkit-touch-callout: none; }
+        .draggable-item:active { cursor: grabbing; z-index: 50; }
+        .dragging { opacity: 0.5; border: 2px dashed #f59e0b; }
+        .drag-over { border-top: 2px solid #f59e0b; }
+
+        /* Animation Classes */
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+
+        input, select, textarea { font-size: 16px !important; }
+        .scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .scroll-y::-webkit-scrollbar { width: 4px; }
+        .scroll-y::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        
+        .anim-fade { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .expand-content { transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out; overflow: hidden; }
+        
+        .login-bg { background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); }
+        
+        /* Utility classes for printing logic */
+        .show-on-print { display: none; } 
+        
+        /* Markdown override */
+        .markdown-body ul { list-style-type: disc; padding-left: 20px; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 20px; }
+        .markdown-body strong { font-weight: bold; color: #fbbf24; }
+    </style>
+</head>
+<body>
+    <div id="loader"><div class="spinner"></div><p style="margin-top:20px; color:#94a3b8; font-size:12px; font-weight:bold;">Bora de Van 🚐</p></div>
+    <div id="root"></div>
+
+    <script>setTimeout(()=>{const l=document.getElementById('loader');if(l)l.remove()},4000);</script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        /* --- FIREBASE CONFIG --- */
+        const firebaseConfig = {
+            apiKey: "AIzaSyConFpC-5IPOO8dxrYggy8JusWtC7BsgWs",
+            authDomain: "lotacao-97c37.firebaseapp.com",
+            projectId: "lotacao-97c37",
+            databaseURL: "https://lotacao-97c37-default-rtdb.firebaseio.com",
+            storageBucket: "lotacao-97c37.appspot.com",
+            messagingSenderId: "782139851070",
+            appId: "1:782139851070:web:dd2f3327c33a45f443ec6f"
+        };
+
+        let db = null;
+        let auth = null;
+        try {
+            if (typeof firebase !== 'undefined') {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                db = firebase.database(); 
+                auth = firebase.auth();
+            } else {
+                console.error("SDK do Firebase não encontrado.");
+            }
+        } catch(e) { 
+            console.error("Erro na Inicialização do Firebase:", e.message || e); 
+        }
+
+        /* --- GEMINI API --- */
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+
+        const callGemini = async (prompt, apiKey) => {
+            if (!apiKey) throw new Error("Chave API Gemini não configurada!");
+            const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || "Erro na API Gemini");
+            }
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        };
+
+        /* --- DADOS --- */
+        const BAIRROS = [ "Forte / Canto do Forte", "Tude Bastos / Chico de Paula", "Boqueirao", "Guilhermina", "Aviação", "Tupi", "Tupiry", "Ocian", "Gloria", "Vila Antartica", "Vila Sonia", "Quietude", "Mirim", "Anhanguera", "Maracana", "Ribeiropolis", "Esmeralda", "Samambaia", "Melvi", "Caiçara", "Imperador", "Real", "Princesa", "Florida", "Cidade das Crianças", "Solemar" ];
+        const COLORS = ['#f59e0b', '#d97706', '#b45309', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'];
+        
+        const INITIAL_SP_LIST = [
+            {vaga: '02', name: 'Cristian'}, {vaga: '20', name: 'Aquiles'}, {vaga: '06', name: 'Bruno'},
+            {vaga: '21', name: 'Campos'}, {vaga: '01', name: 'Max'},
+            {vaga: '17', name: 'Max'}, 
+            {vaga: '10', name: 'Salles'}, {vaga: '11', name: 'Reginaldo'}, {vaga: '03', name: 'Chaiene'},
+            {vaga: '22', name: 'Wash'}, {vaga: '08', name: 'Cristina'}, {vaga: '16', name: 'Sergio'},
+            {vaga: '09', name: 'Wash'}, {vaga: '13', name: 'Rafael'}, {vaga: '12', name: 'Del'},
+            {vaga: '07', name: 'Martins'}, {vaga: '04', name: 'Martins'}, {vaga: '14', name: 'Wash'},
+            {vaga: '15', name: 'Julia'}, {vaga: '19', name: 'José'}, {vaga: '18', name: 'Domingos'},
+            {vaga: '05', name: 'Fernando'}, {vaga: '00', name: 'Topic'}
+        ];
+
+        /* --- USERS (Database Simulado) --- */
+        const USERS_DB = {
+            'Admin': { pass: 'Admin', role: 'admin' },
+            'Operador': { pass: 'Operador', role: 'operador' },
+            'Breno': { pass: '15744751', role: 'admin' }
+        };
+
+        /* --- TEMAS --- */
+        const THEMES = {
+            default: { name: 'Padrão', bg: 'bg-slate-950', card: 'bg-slate-800 border-slate-700', text: 'text-slate-200', primary: 'bg-amber-600 text-white', accent: 'text-amber-400', border: 'border-slate-700', radius: 'rounded-xl' },
+            dark: { name: 'Escuro Profundo', bg: 'bg-black', card: 'bg-zinc-900 border-zinc-800', text: 'text-zinc-200', primary: 'bg-orange-600 text-white', accent: 'text-orange-400', border: 'border-zinc-800', radius: 'rounded-xl' },
+            cyberpunk: { name: 'Cyberpunk', bg: 'bg-[#0b0c15]', card: 'bg-[#181926] border-[#2f3146]', text: 'text-[#e0def4]', primary: 'bg-[#eb6f92] text-white', accent: 'text-[#f6c177]', border: 'border-[#2f3146]', radius: 'rounded-none' },
+            dracula: { name: 'Drácula', bg: 'bg-[#282a36]', card: 'bg-[#44475a] border-[#6272a4]', text: 'text-[#f8f8f2]', primary: 'bg-[#bd93f9] text-[#282a36]', accent: 'text-[#50fa7b]', border: 'border-[#6272a4]', radius: 'rounded-xl' },
+            solar: { name: 'Solar (Claro)', bg: 'bg-[#fdf6e3]', card: 'bg-[#eee8d5] border-[#d2b589]', text: 'text-[#657b83]', primary: 'bg-[#b58900] text-white', accent: 'text-[#cb4b16]', border: 'border-[#d2b589]', radius: 'rounded-2xl' },
+            midnight: { name: 'Meia-noite', bg: 'bg-indigo-950', card: 'bg-indigo-900 border-indigo-800', text: 'text-indigo-100', primary: 'bg-cyan-600 text-white', accent: 'text-cyan-300', border: 'border-indigo-700', radius: 'rounded-xl' },
+            forest: { name: 'Floresta', bg: 'bg-green-950', card: 'bg-green-900 border-green-800', text: 'text-green-100', primary: 'bg-emerald-600 text-white', accent: 'text-emerald-400', border: 'border-green-800', radius: 'rounded-xl' },
+        };
+
+        /* --- ICONES --- */
+        const Icon = ({ children, size=20, className="" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        
+        const Icons = {
+            Menu: () => <Icon><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></Icon>,
+            Home: () => <Icon><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></Icon>,
+            Users: () => <Icon><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>,
+            Car: () => <Icon><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9"/><path d="M2 12h17a1 1 0 0 0 .9-1.5l-2.4-3.2"/><path d="M2 12v6"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></Icon>,
+            Van: () => <Icon><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><line x1="16" y1="8" x2="20" y2="8"/><path d="M16 8h4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></Icon>,
+            Map: () => <Icon><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></Icon>,
+            Calendar: () => <Icon><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Icon>,
+            Settings: () => <Icon><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></Icon>,
+            Plus: () => <Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>,
+            X: () => <Icon><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>,
+            Trash: () => <Icon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></Icon>,
+            Copy: () => <Icon><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></Icon>,
+            Phone: () => <Icon><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></Icon>,
+            Edit: () => <Icon><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></Icon>,
+            Refresh: () => <Icon><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></Icon>,
+            Check: () => <Icon><polyline points="20 6 9 17 4 12"/></Icon>,
+            Back: () => <Icon><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></Icon>,
+            Send: () => <Icon><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></Icon>,
+            Zap: () => <Icon><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Icon>,
+            Download: () => <Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></Icon>,
+            Mic: () => <Icon><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></Icon>,
+            Stop: () => <Icon><rect x="9" y="9" width="6" height="6"/></Icon>,
+            Stars: () => <Icon><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></Icon>,
+            ChevronLeft: () => <Icon><polyline points="15 18 9 12 15 6" /></Icon>,
+            ChevronRight: () => <Icon><polyline points="9 18 15 12 9 6" /></Icon>,
+            ChevronDown: () => <Icon><polyline points="6 9 12 15 18 9" /></Icon>,
+            ChevronUp: () => <Icon><polyline points="18 15 12 9 6 15" /></Icon>,
+            Search: () => <Icon><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></Icon>,
+            Dollar: () => <Icon><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></Icon>,
+            Clipboard: () => <Icon><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></Icon>,
+            Box: () => <Icon><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></Icon>,
+            Repeat: () => <Icon><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></Icon>,
+            Lock: () => <Icon><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>,
+            LogOut: () => <Icon><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></Icon>,
+            Shield: () => <Icon><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Icon>,
+            List: () => <Icon><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></Icon>,
+            CheckCircle: () => <Icon><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>,
+            Edit3: () => <Icon><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></Icon>,
+            ArrowUp: () => <Icon><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></Icon>,
+            ArrowDown: () => <Icon><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></Icon>,
+            Moon: () => <Icon><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></Icon>,
+            Sun: () => <Icon><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></Icon>,
+            Clock: () => <Icon><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>,
+            Slash: () => <Icon><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></Icon>,
+            CalendarX: () => <Icon><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="10" y1="14" x2="14" y2="18"/><line x1="14" y1="14" x2="10" y2="18"/></Icon>,
+            Print: () => <Icon><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></Icon>,
+            Message: () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></Icon>
+        };
+
+        /* --- HELPERS --- */
+        const getTodayDate = () => {
+            const d = new Date();
+            const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+            return local.toISOString().split('T')[0];
+        };
+
+        const getOperationalDate = () => {
+            const d = new Date();
+            if (d.getHours() > 19 || (d.getHours() === 19 && d.getMinutes() >= 30)) {
+                 d.setDate(d.getDate() + 1);
+            }
+            const local = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+            return local.toISOString().split('T')[0];
+        };
+
+        const formatDisplayDate = (d) => {
+            if(!d) return '';
+            const [y, m, day] = d.split('-');
+            return `${day}/${m}/${y}`;
+        };
+        
+        const dateAddDays = (dateStr, days) => {
+            const d = new Date(dateStr + 'T00:00:00');
+            d.setDate(d.getDate() + days);
+            return d.toISOString().split('T')[0];
+        };
+
+        const formatTime = (t) => t; 
+
+        const getBairroIdx = b => { const i=BAIRROS.indexOf(b); return i===-1?99:i; };
+
+        const getAvatarUrl = (name) => {
+            if(name && name.toLowerCase() === 'breno') {
+                return `https://api.dicebear.com/7.x/avataaars/svg?seed=Robert`; 
+            }
+            return `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`;
+        };
+
+        const generateUniqueId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+        const addMinutes = (time, mins) => {
+            if(!time) return '';
+            const [h, m] = time.split(':').map(Number);
+            const date = new Date();
+            date.setHours(h);
+            date.setMinutes(m + mins);
+            return date.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', hour12: false});
+        }
+
+        const calculateTimeSlot = (t) => { 
+            if(!t) return '-'; 
+            const endTime = addMinutes(t, 45);
+            return `${t} - ${endTime}`; 
+        };
+        
+        const generateWhatsappMessage = (tripId, passengers, driverName, time, date) => {
+            if(!passengers?.length) return "";
+            
+            const [y, m, d] = date.split('-');
+            const formattedDate = `${d}/${m}/${y}`;
+
+            let msg = `*DADOS DA VIAGEM - ${formattedDate}*\n\n`;
+            msg += `*Código:* ${tripId}\n`;
+            msg += `*Horário:* ${time}\n`;
+            msg += `*PASSAGEIRO(S):*\n\n`;
+
+            const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
+
+            sorted.forEach((p, index) => {
+                const endTime = addMinutes(p.time || time, 45);
+                msg += `*Passageiro ${index + 1}:*\n`;
+                msg += `• Nome: ${p.name}\n`;
+                msg += `• Telefone: ${p.phone || 'Sem número'}\n`;
+                msg += `• Endereço: ${p.address || ''}\n`;
+                msg += `• Referência: ${p.reference || ''}\n`;
+                msg += `• Bairro: ${p.neighborhood || ''}\n`;
+                msg += `• Qtd: ${p.passengerCount || 1} passageiro(s)\n`;
+                msg += `• Horário: ${p.time || time}/${endTime}\n`;
+                msg += `• Bagagens: ${p.luggageCount || 0} bagagens\n\n`;
+            });
+
+            msg += `_Enviado via Bora de Van Transportes_`;
+            return msg;
+        };
+
+        const sendPaxWhatsapp = (p) => {
+            if(!p.phone) return alert('Passageiro sem telefone.');
+            const msg = encodeURIComponent(`Olá ${p.name}, sobre seu agendamento para ${formatDisplayDate(p.date)} às ${p.time}...`);
+            window.open(`https://wa.me/55${p.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+        };
+
+        const generateTripListText = (passengers, driverName, time) => {
+            const sorted = passengers.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
+            return `VIAGEM ${time} - ${driverName}\n\n` + sorted.map(p=> `• ${p.name} - ${p.neighborhood}\n  ${p.address} (${p.reference || ''})`).join('\n\n');
+        };
+
+        // NOVO COMPONENTE: Timer em Tempo Real para Viagens Temporárias
+        const TempTripTimer = ({ date, time }) => {
+            const [timeLeft, setTimeLeft] = useState('');
+            
+            useEffect(() => {
+                const tick = () => {
+                    if (!date || !time) return;
+                    const [y, mo, d] = date.split('-').map(Number);
+                    const [h, mi] = time.split(':').map(Number);
+                    // Cria data de início baseada nos dados da viagem
+                    const tripStart = new Date(y, mo - 1, d, h, mi, 0);
+                    // Expira em 45 minutos
+                    const expiration = new Date(tripStart.getTime() + 45 * 60000);
+                    const now = new Date();
+                    const diff = expiration - now;
+                    
+                    if (diff <= 0) {
+                        setTimeLeft('Expirado');
+                    } else {
+                        const m = Math.floor(diff / 60000);
+                        const s = Math.floor((diff % 60000) / 1000);
+                        setTimeLeft(`${m}m ${s}s restantes`);
+                    }
+                };
+                tick(); // Atualiza imediatamente
+                const int = setInterval(tick, 1000); // Atualiza a cada segundo
+                return () => clearInterval(int);
+            }, [date, time]);
+
+            return <span>{timeLeft}</span>;
+        };
+
+        /* --- PRINT FUNCTION --- */
+        const handlePrint = async (targetId, filename, title, options = {}) => {
+            const element = document.getElementById(targetId);
+            if (!element) return alert("Elemento não encontrado para impressão.");
+
+            const activeBtn = document.activeElement;
+            const originalHTML = activeBtn ? activeBtn.innerHTML : '';
+            if(activeBtn) {
+                activeBtn.innerText = 'Gerando...';
+                activeBtn.disabled = true;
+            }
+
+            try {
+                let target = element;
+                let clone = null;
+                let wrapper = null;
+
+                const itemCount = element.children.length;
+                let columns = 1;
+
+                if (options.forceCols) {
+                    columns = options.forceCols;
+                } else if (options.mode === 'confirmados') {
+                    columns = itemCount > 12 ? 2 : 1;
+                } else if (options.mode === 'lousa') {
+                    columns = Math.ceil(itemCount / 12);
+                    if (columns < 1) columns = 1;
+                }
+
+                wrapper = document.createElement('div');
+                wrapper.style.position = 'fixed';
+                wrapper.style.left = '-9999px';
+                wrapper.style.top = '0';
+                wrapper.style.backgroundColor = '#1e293b';
+                wrapper.style.color = 'white';
+                wrapper.style.padding = '40px'; 
+                wrapper.style.zIndex = '99999';
+                
+                const titleEl = document.createElement('h1');
+                titleEl.innerText = `${title} - ${new Date().toLocaleDateString('pt-BR')}`;
+                titleEl.style.textAlign = 'center';
+                titleEl.style.marginBottom = '25px';
+                titleEl.style.fontSize = '32px'; 
+                titleEl.style.fontWeight = 'bold';
+                titleEl.style.color = '#fbbf24'; 
+                titleEl.style.width = '100%';
+                wrapper.appendChild(titleEl);
+
+                clone = element.cloneNode(true);
+                
+                const toHide = clone.querySelectorAll('.hide-on-print');
+                toHide.forEach(el => el.remove());
+
+                const toShow = clone.querySelectorAll('.show-on-print');
+                toShow.forEach(el => {
+                    el.classList.remove('hidden');
+                    el.style.display = 'block';
+                });
+
+                const textElements = clone.querySelectorAll('.font-bold, .font-mono');
+                textElements.forEach(el => {
+                    const style = window.getComputedStyle(el);
+                    const fontSize = parseFloat(style.fontSize);
+                    if (fontSize) {
+                        el.style.fontSize = `${fontSize * 1.25}px`; 
+                    }
+                });
+
+                Array.from(clone.children).forEach(child => {
+                    child.style.display = 'flex';
+                    child.style.alignItems = 'center'; 
+                    child.style.justifyContent = 'space-between';
+                    child.style.padding = '10px'; 
+                });
+                
+                clone.style.width = '100%';
+                clone.style.height = 'auto';
+                clone.style.display = 'block';
+
+                const contentContainer = document.createElement('div');
+                if (columns > 1) {
+                    const colWidth = 500; 
+                    wrapper.style.width = `${columns * colWidth + 80}px`; 
+                    contentContainer.style.columnCount = columns.toString();
+                    contentContainer.style.columnGap = '30px';
+                    
+                    Array.from(clone.children).forEach(child => {
+                        child.style.breakInside = 'avoid';
+                        child.style.pageBreakInside = 'avoid';
+                        child.style.marginBottom = '15px';
+                    });
+                } else {
+                    wrapper.style.width = `${Math.max(element.scrollWidth, 600) + 80}px`;
+                }
+
+                contentContainer.appendChild(clone);
+                wrapper.appendChild(contentContainer);
+                
+                document.body.appendChild(wrapper);
+                target = wrapper;
+
+                const canvas = await html2canvas(target, {
+                    backgroundColor: '#1e293b',
+                    scale: 2,
+                    useCORS: true,
+                    windowWidth: target.scrollWidth,
+                    width: target.scrollWidth
+                });
+
+                const link = document.createElement('a');
+                link.download = `${filename}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+
+                if (wrapper) document.body.removeChild(wrapper);
+
+            } catch (err) {
+                console.error("Erro no print:", err);
+                alert("Erro ao gerar imagem.");
+            } finally {
+                if(activeBtn) {
+                    activeBtn.innerHTML = originalHTML;
+                    activeBtn.disabled = false;
+                }
+            }
+        };
+
+        /* --- COMPONENTS --- */
+        const Button = ({ onClick, children, theme, variant='primary', icon:I, disabled, className='', size='md' }) => {
+            const t = theme || THEMES.default;
+            const sz = { sm:'px-3 py-2 text-sm', md:'px-4 py-3.5 text-base' };
+            const v = {
+                primary: `${t.primary} shadow-md active:opacity-80`,
+                secondary: `${t.card} ${t.text} active:opacity-80 border ${t.border}`,
+                danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20 active:bg-rose-500/20`,
+                success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 active:bg-emerald-500/20`,
+                ai: `bg-ai text-white shadow-lg active:opacity-80 border-none`
+            };
+            return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 ${t.radius} font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${v[variant]} ${sz[size]} ${className}`}>{I && <I size={size==='sm'?16:20} />} {children}</button>;
+        };
+
+        const IconButton = ({ onClick, icon:I, variant='default', theme, disabled }) => {
+             const t = theme || THEMES.default;
+             const v = {
+                 default: `${t.card} ${t.text} hover:opacity-80 border ${t.border}`,
+                 danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20`,
+                 success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20`
+             }
+             return <button onClick={onClick} disabled={disabled} className={`w-12 h-12 flex-shrink-0 flex items-center justify-center ${t.radius} transition-all active:scale-95 disabled:opacity-50 ${v[variant]}`}><I size={22}/></button>
+        }
+
+        const Input = ({ label, theme, ...props }) => {
+            const t = theme || THEMES.default;
+            return (
+                <div className="flex flex-col gap-1 w-full">
+                    <label className={`text-xs font-bold uppercase tracking-wider opacity-60 ml-1`}>{label}</label>
+                    <input className={`bg-black/10 border border-white/10 ${t.text} ${t.radius} px-4 py-3.5 outline-none focus:border-current transition-colors w-full`} {...props} />
+                </div>
+            );
+        };
+
+        /* --- CHARTS (ANIMATED) --- */
+        const DonutChart = ({ data, theme }) => {
+            const t = theme || THEMES.default;
+            const [mounted, setMounted] = useState(false);
+            useEffect(() => { setTimeout(() => setMounted(true), 100); }, []);
+
+            const total = data.reduce((a, b) => a + b.value, 0);
+            let accumulatedCircumference = 0;
+            const radius = 40;
+            const circumference = 2 * Math.PI * radius; // aprox 251.32
+
+            return (
+                <div className="flex items-center gap-6">
+                    <div className="relative w-32 h-32 flex-shrink-0">
+                        <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
+                            {data.map((d, i) => {
+                                const percentage = total > 0 ? d.value / total : 0;
+                                const strokeDasharray = `${percentage * circumference} ${circumference}`;
+                                const strokeDashoffset = -accumulatedCircumference;
+                                accumulatedCircumference += percentage * circumference;
+                                
+                                return (
+                                    <circle
+                                        key={i}
+                                        cx="50"
+                                        cy="50"
+                                        r={radius}
+                                        fill="transparent"
+                                        stroke={COLORS[i % COLORS.length]}
+                                        strokeWidth="15"
+                                        strokeDasharray={strokeDasharray}
+                                        strokeDashoffset={strokeDashoffset}
+                                        style={{
+                                            transition: 'stroke-dasharray 1s ease-out',
+                                            strokeDasharray: mounted ? strokeDasharray : `0 ${circumference}`
+                                        }}
+                                    />
+                                );
+                            })}
+                        </svg>
+                         <div className={`absolute inset-0 flex flex-col items-center justify-center pointer-events-none`}>
+                            <span className="text-2xl font-bold">{total}</span>
+                            <span className="text-[10px] opacity-60 uppercase">Total</span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2 w-full">
+                        {data.map((d, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs w-full">
+                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                                <span className="opacity-70 truncate flex-1">{d.label}</span>
+                                <span className="font-bold">{d.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        
+        const HorizontalBarChart = ({ data, theme }) => {
+            const [mounted, setMounted] = useState(false);
+            useEffect(() => { setTimeout(() => setMounted(true), 100); }, []);
+
+            const max = Math.max(...data.map(d=>d.value)) || 1;
+            return (
+                <div className="flex flex-col gap-3">
+                    {data.map((d,i) => (
+                        <div key={i} className="flex flex-col gap-1">
+                            <div className="flex justify-between text-xs opacity-70">
+                                <span>{d.label}</span>
+                                <span className="font-bold">{d.value}</span>
+                            </div>
+                            <div className="h-2 w-full bg-black/20 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full rounded-full transition-all duration-1000 ease-out" 
+                                    style={{
+                                        width: mounted ? `${(d.value/max)*100}%` : '0%', 
+                                        backgroundColor: COLORS[i%COLORS.length]
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        /* --- LOGIN SCREEN --- */
+        const LoginScreen = ({ onLogin }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [geoStatus, setGeoStatus] = useState('');
+
+            const handleLoginClick = () => {
+                if(!username || !password) return alert("Preencha usuário e senha");
+                
+                setLoading(true);
+                setGeoStatus('Verificando segurança...');
+
+                const proceedLogin = (coords) => {
+                    onLogin(username, password, coords);
+                };
+
+                if (!navigator.geolocation) {
+                    proceedLogin({ error: 'Não suportado' });
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const { latitude, longitude, accuracy } = pos.coords;
+                        proceedLogin({ latitude, longitude, accuracy });
+                    },
+                    (err) => {
+                        console.warn("Geolocalização bloqueada pelo navegador. Prosseguindo sem local.");
+                        proceedLogin({ error: 'Permissão negada/Bloqueado' });
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            };
+
+            return (
+                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center login-bg p-6 text-white">
+                    <div className="mb-8 flex flex-col items-center">
+                        <div className="w-20 h-20 bg-amber-600 rounded-2xl flex items-center justify-center mb-4 shadow-xl">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><line x1="16" y1="8" x2="20" y2="8"/><path d="M16 8h4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                        </div>
+                        <h1 className="text-3xl font-bold">Bora de Van</h1>
+                        <p className="opacity-60 text-sm">Gestão de Transporte</p>
+                    </div>
+                    <div className="w-full max-w-sm space-y-4 bg-white/5 p-6 rounded-2xl border border-white/10 backdrop-blur-sm">
+                        <Input 
+                            theme={{text: 'text-white', radius: 'rounded-xl'}} 
+                            label="Usuário" 
+                            value={username} 
+                            onChange={e => setUsername(e.target.value)} 
+                        />
+                        <Input 
+                            theme={{text: 'text-white', radius: 'rounded-xl'}} 
+                            label="Senha" 
+                            type="password" 
+                            value={password} 
+                            onChange={e => setPassword(e.target.value)} 
+                        />
+                        
+                        {geoStatus && <p className="text-xs text-center text-amber-400 animate-pulse">{geoStatus}</p>}
+
+                        <button 
+                            onClick={handleLoginClick}
+                            disabled={loading}
+                            className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            {loading ? (
+                                <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"/> Verificando...</>
+                            ) : (
+                                <><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Entrar</>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        /* --- APP --- */
+        function App() {
+            const [user, setUser] = useState(null); 
+            const [isFireConnected, setIsFireConnected] = useState(false);
+            const [view, setView] = useState('dashboard');
+            const [menuOpen, setMenuOpen] = useState(false);
+            const [data, setData] = useState({ passengers: [], drivers: [], trips: [], notes: [], lostFound: [], blocked_ips: [] });
+            const [noteText, setNoteText] = useState('');
+            const [currentIp, setCurrentIp] = useState(''); 
+            
+            const [spList, setSpList] = useState(INITIAL_SP_LIST);
+            const [tableStatus, setTableStatus] = useState({}); 
+            const [lousaOrder, setLousaOrder] = useState([]); 
+            const [editName, setEditName] = useState(null);
+            const [tempName, setTempName] = useState('');
+            const [tableTab, setTableTab] = useState('geral'); 
+            
+            const [currentOpDate, setCurrentOpDate] = useState(getOperationalDate());
+            const [analysisDate, setAnalysisDate] = useState(getOperationalDate());
+            
+            const [madrugadaData, setMadrugadaData] = useState({}); 
+            const [madrugadaList, setMadrugadaList] = useState([]); 
+            const [tempVagaMadrugada, setTempVagaMadrugada] = useState(''); 
+            
+            const [cannedMessages, setCannedMessages] = useState([]);
+
+            const [tempJustification, setTempJustification] = useState('');
+            const [vagaToBlock, setVagaToBlock] = useState(null);
+
+            const [paxDeleteSessionCount, setPaxDeleteSessionCount] = useState(0);
+            
+            const [themeKey, setThemeKey] = useState('default');
+            const [geminiKey, setGeminiKey] = useState(localStorage.getItem('nexflow_gemini_key') || '');
+            
+            const [ipHistory, setIpHistory] = useState([]);
+            const [ipLabels, setIpLabels] = useState({});
+            
+            const theme = useMemo(() => THEMES[themeKey] || THEMES.default, [themeKey]);
+
+            const [selectedDate, setSelectedDate] = useState(getTodayDate());
+            const [calendarDate, setCalendarDate] = useState(new Date());
+
+            const [modal, setModal] = useState(null); 
+            const [aiModal, setAiModal] = useState(false);
+            const [aiInput, setAiInput] = useState('');
+            const [aiLoading, setAiLoading] = useState(false);
+            const [isListening, setIsListening] = useState(false);
+            const [formData, setFormData] = useState({});
+            const [suggestedTrip, setSuggestedTrip] = useState(null);
+            const [searchId, setSearchId] = useState('');
+            const [editingTripId, setEditingTripId] = useState(null);
+            const [filterStatus, setFilterStatus] = useState('Ativo'); 
+            const [searchTerm, setSearchTerm] = useState('');
+            const [expandedPax, setExpandedPax] = useState(null);
+            const [ipReason, setIpReason] = useState('');
+            const [ipToBlock, setIpToBlock] = useState('');
+            
+            const [draggedItem, setDraggedItem] = useState(null); 
+
+            // HISTORY STATE
+            const [historyDate, setHistoryDate] = useState(new Date());
+            const [expandedDays, setExpandedDays] = useState({});
+
+            // STATE PARA O MENU DE CONTEXTO (BOTÃO DIREITO)
+            const [contextMenu, setContextMenu] = useState(null);
+
+            // STATE PARA SWIPE (GESTOS LATERAIS)
+            const [swipeStart, setSwipeStart] = useState(null);
+            const [swipeEnd, setSwipeEnd] = useState(null);
+            
+            // Estado para forçar atualização da UI a cada minuto (para checar horários expirados)
+            const [uiTicker, setUiTicker] = useState(Date.now());
+
+            const timerRef = useRef(null);
+            // Removido createdTempTripsRef pois usaremos ID determinístico para evitar duplicidade
+            
+            const touchStartPos = useRef({ x: 0, y: 0 });
+            const recognitionRef = useRef(null);
+            
+            useEffect(() => {
+                fetch('https://api.ipify.org?format=json')
+                    .then(r => r.json())
+                    .then(d => setCurrentIp(d.ip))
+                    .catch(e => console.error("Erro IP:", e));
+
+                if(auth) {
+                    const unsub = auth.onAuthStateChanged(u => {
+                        console.log("Estado Auth Firebase:", u ? "Conectado" : "Desconectado");
+                        setIsFireConnected(!!u);
+                    });
+                    return () => unsub();
+                }
+            }, []);
+
+            useEffect(() => {
+                if (user && currentIp && data.blocked_ips && data.blocked_ips.length > 0) {
+                    const blocked = data.blocked_ips.find(b => b.ip === currentIp);
+                    if (blocked) {
+                        handleLogout(); 
+                    }
+                }
+            }, [user, currentIp, data.blocked_ips]);
+
+            const logAccess = async (username, type, coords = null) => {
+                if (!db) return;
+                try {
+                    const timestamp = new Date().toISOString();
+                    const logData = {
+                        username, type, timestamp,
+                        ip: currentIp || 'Desconhecido',
+                        userAgent: navigator.userAgent,
+                        location: coords && coords.latitude ? { lat: coords.latitude, lng: coords.longitude } : (coords && coords.error ? coords.error : 'Desconhecido')
+                    };
+                    const safeIp = (currentIp || 'unknown').replace(/\./g, '_');
+                    db.ref(`access_logs/${safeIp}`).push(logData);
+                    db.ref(`access_timeline`).push(logData);
+                } catch (e) { console.error("Erro log:", e); }
+            };
+
+            useEffect(() => {
+                const loader = document.getElementById('loader');
+                if(loader) { loader.style.opacity = '0'; setTimeout(()=>loader.remove(), 500); }
+                
+                if (!db || !user || !isFireConnected) return;
+                
+                const nodes = ['passengers', 'drivers', 'trips', 'notes', 'lostFound', 'blocked_ips'];
+                const unsubs = nodes.map(node => {
+                    const ref = db.ref(node);
+                    const callback = ref.on('value', (snapshot) => {
+                        const val = snapshot.val();
+                        const list = val ? Object.keys(val).map(key => ({ id: key, ...val[key] })) : [];
+                        if (node === 'notes' && user) {
+                           // Filter logic handled in render for notes
+                        } else if (node === 'passengers' || node === 'drivers' || node === 'trips') {
+                            list.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+                        }
+                        setData(prev => ({ ...prev, [node]: list }));
+                    }, (error) => {
+                        console.error(`Erro ao ler ${node}:`, error);
+                        if(error.code === 'PERMISSION_DENIED') {
+                            console.warn("Permissão negada. Verifique se o Login Anônimo está ativado no console do Firebase.");
+                        }
+                    });
+                    return () => ref.off('value', callback);
+                });
+                return () => unsubs.forEach(fn => fn());
+            }, [user, isFireConnected]); 
+
+            useEffect(() => {
+                if(!db || !user || !isFireConnected) return; 
+                const ref = db.ref('canned_messages_config/list');
+                const cb = ref.on('value', snap => {
+                    const val = snap.val();
+                    setCannedMessages(val || []);
+                });
+                return () => ref.off('value', cb);
+            }, [db, user, isFireConnected]);
+
+            useEffect(() => {
+                 if (!db || !user || !isFireConnected) return; 
+                 const ref = db.ref(`user_data/${user.username}/notes`);
+                 const cb = ref.on('value', snap => {
+                     const val = snap.val();
+                     const list = val ? Object.keys(val).map(key => ({ id: key, ...val[key] })) : [];
+                     list.sort((a,b) => b.id - a.id);
+                     setData(prev => ({...prev, notes: list}));
+                 });
+                 
+                 const prefRef = db.ref(`user_data/${user.username}/preferences/theme`);
+                 prefRef.once('value', snap => {
+                     if(snap.exists()) setThemeKey(snap.val());
+                 });
+
+                 return () => { ref.off('value', cb); }
+            }, [user, isFireConnected]);
+            
+            useEffect(() => {
+                if (user && user.username === 'Breno' && db && isFireConnected) { 
+                    const timelineRef = db.ref('access_timeline').limitToLast(50);
+                    const labelsRef = db.ref('ip_labels');
+                    timelineRef.on('value', snap => {
+                        const val = snap.val();
+                        const list = val ? Object.keys(val).map(k => ({...val[k], id: k})).reverse() : [];
+                        setIpHistory(list);
+                    });
+                    labelsRef.on('value', snap => setIpLabels(snap.val() || {}));
+                    return () => { timelineRef.off(); labelsRef.off(); };
+                }
+            }, [user, isFireConnected]);
+
+            useEffect(() => {
+                const checkDate = () => {
+                    const newOpDate = getOperationalDate();
+                    if (newOpDate !== currentOpDate) {
+                        console.log("Virada de dia detectada (19:30+). Atualizando para:", newOpDate);
+                        setCurrentOpDate(newOpDate);
+                        setAnalysisDate(newOpDate); 
+                    }
+                };
+                const interval = setInterval(checkDate, 60000); 
+                return () => clearInterval(interval);
+            }, [currentOpDate]);
+
+            useEffect(() => {
+                if(!db || !isFireConnected) return; 
+                
+                const driversRef = db.ref('drivers_table_list');
+                driversRef.on('value', snap => {
+                    const val = snap.val();
+                    if(val) {
+                        const hasMax17 = val.some(d => d.vaga === '17');
+                        const hasRafael13 = val.some(d => d.vaga === '13'); 
+                        if (!hasMax17 || !hasRafael13) {
+                            console.log("Auto-corrigindo lista...");
+                            db.ref('drivers_table_list').set(INITIAL_SP_LIST);
+                            setSpList(INITIAL_SP_LIST);
+                        } else {
+                            setSpList(val);
+                        }
+                    } else {
+                        db.ref('drivers_table_list').set(INITIAL_SP_LIST);
+                        setSpList(INITIAL_SP_LIST);
+                    }
+                });
+
+                const madConfigRef = db.ref('madrugada_config/list');
+                madConfigRef.on('value', snap => {
+                    const val = snap.val();
+                    if (val) {
+                        setMadrugadaList(val);
+                    } else {
+                        if(isFireConnected) {
+                            const defaultList = ['05', '21', '18'];
+                            setMadrugadaList(defaultList);
+                        }
+                    }
+                });
+
+                const dailyRef = db.ref(`daily_tables/${currentOpDate}`);
+                
+                dailyRef.on('value', snap => {
+                    const val = snap.val();
+                    if(val) {
+                        setTableStatus(val.status || {});
+                        
+                        let rawLousa = val.lousaOrder || [];
+                        const cleanLousa = rawLousa.map(item => {
+                            if (typeof item === 'string') {
+                                return { vaga: item, uid: generateUniqueId(), riscado: false };
+                            }
+                            return item;
+                        });
+                        
+                        setLousaOrder(cleanLousa);
+                        setMadrugadaData(val.madrugada || {});
+                    } else {
+                        setTableStatus({});
+                        setLousaOrder([]);
+                        setMadrugadaData({});
+                    }
+                });
+
+                return () => {
+                    driversRef.off();
+                    madConfigRef.off();
+                    dailyRef.off();
+                }
+            }, [db, currentOpDate, isFireConnected]); 
+            
+            useEffect(() => {
+                const checkTime = () => {
+                    setUiTicker(Date.now()); 
+                    // A lógica pesada de verificação de viagens foi movida para um useEffect dedicado ao uiTicker
+                };
+                checkTime();
+                const interval = setInterval(checkTime, 60000); // Checa a cada 60s
+                return () => clearInterval(interval);
+            }, []); // Dependência vazia aqui, o outro useEffect fará o trabalho pesado
+
+            // EFFECT PARA GERENCIAR VIAGENS TEMPORÁRIAS (CRIAÇÃO E DELEÇÃO)
+            useEffect(() => {
+                if (!db || !user || !isFireConnected) return;
+
+                const manageTempTrips = () => {
+                    const now = new Date();
+                    const { confirmedTimes, startLousaTime } = getTableTimes();
+                    
+                    // 1. Identificar slots ativos (Confirmados e Lousa)
+                    // Usamos um Map para garantir que cada vaga apareça apenas UMA VEZ na lista de processamento
+                    const activeSlotsMap = new Map();
+
+                    // Confirmados
+                    getRotatedList(currentOpDate).forEach(driver => {
+                        if (tableStatus[driver.vaga] === 'confirmed') {
+                            activeSlotsMap.set(driver.vaga, { vaga: driver.vaga, time: confirmedTimes[driver.vaga] });
+                        }
+                    });
+
+                    // Lousa
+                    let lousaIndex = 0;
+                    lousaOrder.forEach(item => {
+                        if (!item.riscado) {
+                            const t = new Date(startLousaTime.getTime() + lousaIndex * 30 * 60000);
+                            const timeStr = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                            // Se a vaga já estiver no map (ex: confirmada), a Lousa atualiza o horário ou mantém?
+                            // Geralmente Lousa é fila, então vamos garantir que processamos.
+                            activeSlotsMap.set(item.vaga, { vaga: item.vaga, time: timeStr });
+                            lousaIndex++;
+                        }
+                    });
+
+                    const activeSlots = Array.from(activeSlotsMap.values());
+
+                    // Prepara para calcular IDs sequenciais
+                    // Pega o maior ID atual estritamente numérico para começar a contagem correta
+                    let currentMaxId = data.trips.reduce((max, t) => {
+                        // Garante que só pegamos IDs puramente numéricos para evitar erros com IDs antigos "temp_"
+                        if (t.id && /^\d+$/.test(t.id)) {
+                            const idNum = parseInt(t.id);
+                            return Math.max(max, idNum);
+                        }
+                        return max;
+                    }, 0);
+
+                    // 2. Processar Criação e Deleção
+                    activeSlots.forEach(slot => {
+                        if (!slot.time) return;
+                        
+                        // Parse do horário do slot para Date de hoje
+                        const [h, m] = slot.time.split(':').map(Number);
+                        const slotDate = new Date();
+                        slotDate.setHours(h, m, 0, 0);
+
+                        // Ajuste para virada de dia se necessário
+                        if (now.getHours() < 5 && h > 20) slotDate.setDate(slotDate.getDate() - 1);
+                        else if (now.getHours() > 20 && h < 5) slotDate.setDate(slotDate.getDate() + 1);
+
+                        const diffMinutes = (now - slotDate) / 60000;
+
+                        // Formata a data correta do slot para salvar (YYYY-MM-DD)
+                        // Isso corrige bugs de timer na virada do dia (ex: 23:50 vs 00:10)
+                        const slotDateStr = [
+                            slotDate.getFullYear(),
+                            String(slotDate.getMonth() + 1).padStart(2, '0'),
+                            String(slotDate.getDate()).padStart(2, '0')
+                        ].join('-');
+
+                        // Encontrar motorista no banco
+                        const driverSp = spList.find(d => d.vaga === slot.vaga);
+                        const driverDb = driverSp ? data.drivers.find(d => d.name === driverSp.name) : null;
+                        
+                        if (!driverDb) return;
+
+                        // TRAVA DE SEGURANÇA:
+                        // Verifica se já existe QUALQUER viagem ativa para este motorista hoje (Temp ou Fixa)
+                        // Se já tiver uma viagem rodando, NÃO cria outra temp. Isso evita duplicação (23:30 e 00:00 ao mesmo tempo).
+                        const hasAnyActiveTrip = data.trips.some(t => 
+                            (t.driverId === driverDb.id) && 
+                            t.date === getTodayDate() &&
+                            (t.status === 'Em andamento' || t.status === 'Ativo')
+                        );
+
+                        if (hasAnyActiveTrip) return;
+
+                        // A) CRIAÇÃO: Se estamos no horário (0 a 45min) e não tem viagem -> Criar Temp
+                        if (diffMinutes >= 0 && diffMinutes <= 45) {
+                            // Incrementa o ID baseado no último maior encontrado
+                            currentMaxId++;
+                            const nextId = currentMaxId.toString();
+
+                            const newTrip = {
+                                id: nextId, // ID Numérico Sequencial (ex: 7)
+                                driverId: driverDb.id,
+                                driverName: driverDb.name,
+                                time: slot.time,
+                                date: slotDateStr, // Usa a data calculada correta do slot
+                                passengerIds: [],
+                                status: 'Em andamento',
+                                isTemp: true // Flag de Viagem Temporária
+                            };
+                            db.ref('trips').child(newTrip.id).set(newTrip);
+                        }
+                    });
+
+                    // B) DELEÇÃO: Verificar viagens temporárias expiradas
+                    data.trips.forEach(t => {
+                        if (t.isTemp && t.date === getTodayDate() && t.status !== 'Finalizada') {
+                            const [h, m] = t.time.split(':').map(Number);
+                            const tripDate = new Date();
+                            tripDate.setHours(h, m, 0, 0);
+                            
+                            // Ajuste virada dia
+                            if (now.getHours() < 5 && h > 20) tripDate.setDate(tripDate.getDate() - 1);
+                            else if (now.getHours() > 20 && h < 5) tripDate.setDate(tripDate.getDate() + 1);
+                            
+                            const diff = (now - tripDate) / 60000;
+                            
+                            // Se passou de 45 minutos e ainda é temporária -> Deletar
+                            // TAMBÉM DELETA se a vaga não estiver mais ativa na Lousa/Confirmados (para limpar lixo se vc removeu o motorista da lousa)
+                            const isActiveSlot = activeSlots.some(s => s.vaga && s.time === t.time && (
+                                spList.find(d => d.vaga === s.vaga)?.name === t.driverName
+                            ));
+                            
+                            // Se passou do tempo OU se a vaga não existe mais (foi removida da lousa), deleta
+                            if (diff > 45 || (!isActiveSlot && diff > 1)) {
+                                db.ref('trips').child(t.id).remove();
+                            }
+                        }
+                    });
+                };
+
+                manageTempTrips();
+            }, [uiTicker, data.trips, tableStatus, lousaOrder, spList, data.drivers]);
+
+            // Helper para verificar se passou 30 min
+            const isTimeExpired = (timeStr) => {
+                if(!timeStr) return false;
+                const now = new Date();
+                const [h, m] = timeStr.split(':').map(Number);
+                
+                const confirmedDate = new Date();
+                confirmedDate.setHours(h, m, 0, 0);
+
+                // Ajuste para virada de dia (ex: agora 00:10, confirmado 23:40)
+                let diff = now - confirmedDate;
+                if (diff < -12 * 60 * 60 * 1000) { 
+                     diff += 24 * 60 * 60 * 1000; 
+                }
+                
+                return diff > 30 * 60000; // 30 minutos
+            };
+
+            // EFFECT PARA GERENCIAR O MENU DE CONTEXTO
+            useEffect(() => {
+                const handleContextMenu = (e) => {
+                    e.preventDefault(); 
+                    setContextMenu({ x: e.clientX, y: e.clientY });
+                };
+
+                const handleClick = () => {
+                    if (contextMenu) setContextMenu(null);
+                };
+
+                document.addEventListener('contextmenu', handleContextMenu);
+                document.addEventListener('click', handleClick);
+
+                return () => {
+                    document.removeEventListener('contextmenu', handleContextMenu);
+                    document.removeEventListener('click', handleClick);
+                };
+            }, [contextMenu]);
+
+            useEffect(() => {
+                const savedSession = localStorage.getItem('nexflow_session');
+                if (savedSession) {
+                    const session = JSON.parse(savedSession);
+                    if (session.expiry > Date.now()) {
+                        setUser(session.user);
+                        
+                        if(auth && !auth.currentUser) {
+                            auth.signInAnonymously().catch(e => console.error("Erro re-auth firebase:", e));
+                        }
+
+                        const savedTheme = localStorage.getItem(`${session.user.username}_nexflow_theme`);
+                        if(savedTheme) setThemeKey(savedTheme);
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                                (pos) => {
+                                    const { latitude, longitude, accuracy } = pos.coords;
+                                    logAccess(session.user.username, 'Auto-Login', { latitude, longitude, accuracy });
+                                },
+                                (err) => { logAccess(session.user.username, 'Auto-Login', { error: err.message }); },
+                                { timeout: 5000, maximumAge: 0 }
+                            );
+                        }
+                    } else {
+                        localStorage.removeItem('nexflow_session');
+                    }
+                }
+            }, [currentIp]);
+
+            const handleLogin = async (u, p, coords) => {
+                if (USERS_DB[u] && USERS_DB[u].pass === p) {
+                    
+                    if(auth) {
+                        try {
+                            await auth.signInAnonymously();
+                        } catch(e) {
+                            console.error("Erro Auth Firebase:", e);
+                            alert("Aviso: Falha na conexão segura. Se as regras do banco estiverem ativas, os dados não carregarão.");
+                        }
+                    }
+
+                    const userData = { username: u, role: USERS_DB[u].role };
+                    setUser(userData);
+                    const expiry = Date.now() + 12 * 60 * 60 * 1000;
+                    localStorage.setItem('nexflow_session', JSON.stringify({ user: userData, expiry }));
+                    const savedTheme = localStorage.getItem(`${u}_nexflow_theme`) || 'default';
+                    setThemeKey(savedTheme);
+                    setPaxDeleteSessionCount(0);
+                    await logAccess(u, 'Login Manual', coords);
+                } else {
+                    alert('Usuário ou senha incorretos.');
+                }
+            };
+
+            const handleLogout = () => {
+                setUser(null);
+                localStorage.removeItem('nexflow_session');
+                setPaxDeleteSessionCount(0);
+                setView('dashboard');
+            };
+
+            const getNextId = (col) => {
+                const list = data[col] || [];
+                if (list.length === 0) return "1";
+                if (col === 'notes' || col === 'lostFound' || col === 'blocked_ips') return Date.now().toString();
+                const max = Math.max(...list.map(i => parseInt(i.id) || 0));
+                return (max + 1).toString();
+            };
+
+            const dbOp = async (type, node, payload) => {
+                if(!db) return alert("Sem conexão DB.");
+                try {
+                    let ref;
+                    if (node === 'notes') ref = db.ref(`user_data/${user.username}/notes`);
+                    else if (node === 'preferences') ref = db.ref(`user_data/${user.username}/preferences`);
+                    else ref = db.ref(node);
+
+                    if (type === 'create') {
+                        const nextId = (node === 'notes' || node === 'lostFound' || node === 'blocked_ips') ? Date.now().toString() : getNextId(node);
+                        await ref.child(nextId).set({ ...payload, id: nextId, createdAt: new Date().toISOString() });
+                    } else if (type === 'update') {
+                        if (payload.id) await ref.child(payload.id).update(payload);
+                        else await ref.update(payload);
+                    } else if (type === 'delete') await ref.child(payload).remove();
+                } catch(e) { alert("Erro ao salvar: " + e.message); }
+            };
+
+            const blockIp = () => {
+                if(!ipToBlock) return alert('Digite um IP');
+                if(!/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipToBlock)){
+                     return alert('Formato de IP inválido');
+                }
+                dbOp('create', 'blocked_ips', { ip: ipToBlock, reason: ipReason || 'Manual', blockedBy: user.username });
+                setIpToBlock(''); setIpReason(''); alert('IP Bloqueado com sucesso!');
+            };
+            
+            const saveIpLabel = (ip, label) => {
+                if(!ip) return;
+                const safeIp = ip.replace(/\./g, '_');
+                db.ref(`ip_labels/${safeIp}`).set(label);
+            };
+
+            /* TABLE LOGIC */
+            const getRotatedList = (targetDateStr) => {
+                const startDate = new Date('2026-01-20T00:00:00'); 
+                const target = new Date(targetDateStr + 'T00:00:00');
+                const now = new Date();
+                
+                const diffTime = target - startDate;
+                let diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
+                
+                if (targetDateStr === getTodayDate()) {
+                    if (now.getHours() > 19 || (now.getHours() === 19 && now.getMinutes() >= 30)) {
+                        diffDays += 1;
+                    }
+                }
+
+                if (spList.length === 0) return [];
+                
+                const rotations = ((diffDays % spList.length) + spList.length) % spList.length;
+                return [...spList.slice(rotations), ...spList.slice(0, rotations)];
+            };
+
+            const getTableTimes = () => {
+                const list = getRotatedList(currentOpDate);
+                const confirmedTimes = {}; 
+                let confirmCount = 0;
+                let lastConfirmTime = new Date();
+                lastConfirmTime.setHours(6, 0, 0, 0); 
+
+                list.forEach(driver => {
+                    if (tableStatus[driver.vaga] === 'confirmed') {
+                        const time = new Date(lastConfirmTime.getTime() + confirmCount * 30 * 60000);
+                        confirmedTimes[driver.vaga] = time.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                        confirmCount++;
+                    }
+                });
+
+                const startLousaTime = new Date(lastConfirmTime.getTime() + confirmCount * 30 * 60000);
+                
+                return { confirmedTimes, startLousaTime };
+            };
+
+            const updateTableStatus = (vaga, status) => {
+                const newStatus = { ...tableStatus, [vaga]: status };
+                let newLousa = [...lousaOrder];
+                
+                if (status === 'lousa') {
+                    const exists = newLousa.some(i => i.vaga === vaga);
+                    if (!exists) {
+                        newLousa.push({ vaga, uid: generateUniqueId(), riscado: false });
+                    }
+                } else if (status === 'confirmed') {
+                    newLousa = newLousa.filter(i => i.vaga !== vaga);
+                } else {
+                    newLousa = newLousa.filter(i => i.vaga !== vaga);
+                    delete newStatus[vaga]; 
+                }
+                
+                db.ref(`daily_tables/${currentOpDate}`).update({ status: newStatus, lousaOrder: newLousa });
+            };
+
+            const sendToLousaKeepConfirmed = (vaga) => {
+                let newLousa = [...lousaOrder];
+                // Verifica se já existe na lousa para evitar duplicatas acidentais, mas permite a ação
+                const exists = newLousa.some(i => i.vaga === vaga);
+                
+                if (!exists) {
+                    newLousa.push({ vaga, uid: generateUniqueId(), riscado: false });
+                    db.ref(`daily_tables/${currentOpDate}`).update({ lousaOrder: newLousa });
+                }
+            };
+
+            // Função auxiliar para deletar viagem temporária associada à vaga
+            const removeTempTrip = (vaga) => {
+                const driverSp = spList.find(d => d.vaga === vaga);
+                if (!driverSp) return;
+                
+                // Procura viagem temporária ativa de hoje para este motorista
+                const trip = data.trips.find(t => 
+                    t.isTemp && 
+                    t.date === getTodayDate() && 
+                    (t.driverName === driverSp.name || t.driverId === `temp_sys_${vaga}` || (t.driverId && data.drivers.find(d=>d.name===driverSp.name)?.id === t.driverId))
+                );
+
+                if (trip) {
+                    db.ref('trips').child(trip.id).remove();
+                }
+            };
+
+            const handleLousaAction = (uid, action, vagaRef = null) => {
+                let newLousa = [...lousaOrder];
+                const itemIndex = newLousa.findIndex(i => i.uid === uid);
+                
+                if (itemIndex === -1 && action !== 'duplicate' && action !== 'remove_all') return;
+
+                if (action === 'riscar') {
+                    newLousa[itemIndex].riscado = !newLousa[itemIndex].riscado;
+                } else if (action === 'baixar') {
+                    const [item] = newLousa.splice(itemIndex, 1);
+                    newLousa.push(item);
+                } else if (action === 'remove') {
+                    const itemToRemove = newLousa[itemIndex];
+                    // Se remover da lousa, remove também a viagem temporária se existir
+                    if(itemToRemove) removeTempTrip(itemToRemove.vaga);
+
+                    newLousa.splice(itemIndex, 1);
+                    const stillExists = newLousa.some(i => i.vaga === vagaRef);
+                    if (!stillExists) {
+                        db.ref(`daily_tables/${currentOpDate}/status/${vagaRef}`).remove();
+                    }
+                } else if (action === 'remove_all') {
+                    // Se remover todas as entradas, remove a viagem temporária
+                    removeTempTrip(vagaRef);
+
+                    newLousa = newLousa.filter(i => i.vaga !== vagaRef);
+                    db.ref(`daily_tables/${currentOpDate}/status/${vagaRef}`).remove();
+                } else if (action === 'duplicate') {
+                    const original = newLousa[itemIndex];
+                    newLousa.push({ vaga: original.vaga, uid: generateUniqueId(), riscado: false });
+                }
+
+                db.ref(`daily_tables/${currentOpDate}`).update({ lousaOrder: newLousa });
+            };
+            
+            const handleMadrugadaChange = (vaga, field, value) => {
+                const updated = { ...madrugadaData[vaga], [field]: value };
+                db.ref(`daily_tables/${currentOpDate}/madrugada/${vaga}`).update(updated);
+            };
+
+            const toggleMadrugadaRiscado = (vaga) => {
+                const current = madrugadaData[vaga] || {};
+                const isRiscado = !!current.riscado;
+                
+                if (!isRiscado) {
+                    setVagaToBlock(vaga);
+                    setTempJustification('');
+                    setModal('madrugadaBlock');
+                } else {
+                    const updated = { ...current, riscado: false, comment: '' };
+                    db.ref(`daily_tables/${currentOpDate}/madrugada/${vaga}`).update(updated);
+                }
+            };
+            
+            const confirmMadrugadaBlock = () => {
+                if (!vagaToBlock) return;
+                const current = madrugadaData[vagaToBlock] || {};
+                
+                const updated = { ...current, riscado: true, comment: tempJustification };
+                db.ref(`daily_tables/${currentOpDate}/madrugada/${vagaToBlock}`).update(updated);
+                
+                setModal(null);
+                setVagaToBlock(null);
+            };
+            
+            const addMadrugadaVaga = () => {
+                setTempVagaMadrugada('');
+                setModal('madrugadaVaga');
+            };
+
+            const confirmAddMadrugadaVaga = () => {
+                const vaga = tempVagaMadrugada;
+                if(!vaga) return alert("Digite o número da vaga.");
+                
+                const driver = spList.find(d => d.vaga === vaga);
+                if(!driver) return alert("Essa vaga não existe na tabela geral.");
+                
+                const newList = [...madrugadaList, vaga];
+                const uniqueList = [...new Set(newList)];
+                
+                db.ref('madrugada_config/list').set(uniqueList);
+                setModal(null);
+            };
+
+            const removeMadrugadaVaga = (vagaToRemove) => {
+                if(!confirm(`Remover vaga ${vagaToRemove} da madrugada permanentemente?`)) return;
+                const newList = madrugadaList.filter(v => v !== vagaToRemove);
+                db.ref('madrugada_config/list').set(newList);
+            };
+            
+            const saveDriverName = (vaga) => {
+                if(!tempName.trim()) return;
+                const newList = spList.map(d => d.vaga === vaga ? { ...d, name: tempName } : d);
+                db.ref('drivers_table_list').set(newList);
+                setEditName(null);
+            };
+
+            /* --- CANNED MESSAGES HANDLERS --- */
+            const addCannedMessage = () => {
+                const newMsg = { id: generateUniqueId(), title: 'Nova Mensagem', text: '' };
+                const newList = [...cannedMessages, newMsg];
+                db.ref('canned_messages_config/list').set(newList);
+            };
+
+            const updateCannedMessage = (id, field, value) => {
+                const newList = cannedMessages.map(m => m.id === id ? { ...m, [field]: value } : m);
+                db.ref('canned_messages_config/list').set(newList);
+            };
+
+            const deleteCannedMessage = (id) => {
+                if(!confirm('Excluir esta mensagem?')) return;
+                const newList = cannedMessages.filter(m => m.id !== id);
+                db.ref('canned_messages_config/list').set(newList);
+            };
+
+            /* --- DRAG AND DROP LOGIC --- */
+            
+            const handleDragStart = (e, index) => { e.dataTransfer.setData("text/plain", index); };
+            const handleDrop = (e, dropIndex) => {
+                const dragIndex = parseInt(e.dataTransfer.getData("text/plain"));
+                if (dragIndex === dropIndex) return;
+                const newLousa = [...lousaOrder];
+                const [removed] = newLousa.splice(dragIndex, 1);
+                newLousa.splice(dropIndex, 0, removed);
+                db.ref(`daily_tables/${currentOpDate}`).update({ lousaOrder: newLousa });
+            };
+
+            const handleMadrugadaDragStart = (e, index) => { e.dataTransfer.setData("madIndex", index); };
+            const handleMadrugadaDrop = (e, dropIndex) => {
+                const dragIndex = parseInt(e.dataTransfer.getData("madIndex"));
+                if (isNaN(dragIndex) || dragIndex === dropIndex) return;
+                const newList = [...madrugadaList];
+                const [removed] = newList.splice(dragIndex, 1);
+                newList.splice(dropIndex, 0, removed);
+                db.ref('madrugada_config/list').set(newList);
+            };
+
+            const handleCannedDragStart = (e, index) => { e.dataTransfer.setData("cannedIndex", index); };
+            const handleCannedDrop = (e, dropIndex) => {
+                const dragIndex = parseInt(e.dataTransfer.getData("cannedIndex"));
+                if (isNaN(dragIndex) || dragIndex === dropIndex) return;
+                const newList = [...cannedMessages];
+                const [removed] = newList.splice(dragIndex, 1);
+                newList.splice(dropIndex, 0, removed);
+                db.ref('canned_messages_config/list').set(newList);
+            };
+
+            const handleTouchStart = (e, index, listType) => {
+                const touch = e.touches[0];
+                touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+                
+                if (timerRef.current) clearTimeout(timerRef.current);
+
+                timerRef.current = setTimeout(() => {
+                    setDraggedItem({ index, listType });
+                    if (navigator.vibrate) navigator.vibrate(50); 
+                }, 1300); 
+            };
+
+            const handleTouchMove = (e) => {
+                const touch = e.touches[0];
+                const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+                const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+
+                if (!draggedItem && (dx > 5 || dy > 5)) {
+                    if (timerRef.current) {
+                        clearTimeout(timerRef.current);
+                        timerRef.current = null;
+                    }
+                }
+                
+                if (draggedItem) {
+                    if (e.cancelable) e.preventDefault(); 
+                }
+            };
+
+            const handleTouchEnd = (e, dropIndex, listType) => {
+                if (timerRef.current) {
+                    clearTimeout(timerRef.current);
+                    timerRef.current = null;
+                }
+
+                if (!draggedItem || draggedItem.listType !== listType) {
+                    setDraggedItem(null);
+                    return;
+                }
+                
+                if (draggedItem.index === dropIndex) {
+                    setDraggedItem(null);
+                    return;
+                }
+
+                if (listType === 'lousa') {
+                    const newLousa = [...lousaOrder];
+                    const [removed] = newLousa.splice(draggedItem.index, 1);
+                    newLousa.splice(dropIndex, 0, removed);
+                    db.ref(`daily_tables/${currentOpDate}`).update({ lousaOrder: newLousa });
+                } else if (listType === 'madrugada') {
+                    const newList = [...madrugadaList];
+                    const [removed] = newList.splice(draggedItem.index, 1);
+                    newList.splice(dropIndex, 0, removed);
+                    db.ref('madrugada_config/list').set(newList);
+                } else if (listType === 'canned') {
+                    const newList = [...cannedMessages];
+                    const [removed] = newList.splice(draggedItem.index, 1);
+                    newList.splice(dropIndex, 0, removed);
+                    db.ref('canned_messages_config/list').set(newList);
+                }
+                
+                setDraggedItem(null);
+            };
+
+            /* SWIPE HANDLERS FOR TABLE TABS */
+            const onTouchStartTable = (e) => {
+                setSwipeEnd(null);
+                setSwipeStart(e.targetTouches[0].clientX);
+            }
+
+            const onTouchMoveTable = (e) => {
+                setSwipeEnd(e.targetTouches[0].clientX);
+            }
+
+            const onTouchEndTable = () => {
+                if (!swipeStart || !swipeEnd) return;
+                
+                if (draggedItem) return;
+
+                const distance = swipeStart - swipeEnd;
+                const minSwipeDistance = 50;
+                const isLeftSwipe = distance > minSwipeDistance;
+                const isRightSwipe = distance < -minSwipeDistance;
+                
+                const tabs = ['geral', 'confirmados', 'lousa', 'madrugada', 'mensagens'];
+                const currentIndex = tabs.indexOf(tableTab);
+                
+                if (isLeftSwipe) {
+                    if (currentIndex < tabs.length - 1) {
+                        setTableTab(tabs[currentIndex + 1]);
+                    }
+                } else if (isRightSwipe) {
+                    if (currentIndex > 0) {
+                        setTableTab(tabs[currentIndex - 1]);
+                    }
+                }
+            }
+
+
+            /* AI FUNCTIONS */
+            const handleSmartCreate = async () => {
+                if(!aiInput.trim()) return alert("Diga algo!");
+                if(!geminiKey) return alert("Configure a API Key nas configurações.");
+                setAiLoading(true);
+                try {
+                    const bairros = BAIRROS.join(',');
+                    const prompt = `Analise este texto: "${aiInput}". Extraia um JSON ESTRITAMENTE VÁLIDO (sem markdown, sem crases) com: name, phone, neighborhood (escolha o mais próximo de: ${bairros}), address, reference, passengerCount (num), payment (Dinheiro/Pix/Cartão), time (HH:mm). Se faltar info, use null. Exemplo de saída: {"name": "João", ...}`;
+                    const res = await callGemini(prompt, geminiKey);
+                    
+                    const cleanJson = res.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const json = JSON.parse(cleanJson);
+                    setFormData({...json, status:'Ativo', date: getTodayDate(), luggageCount: 0});
+                    setAiModal(false); setModal('passenger'); setAiInput('');
+                } catch(e) { alert("Erro IA: " + e.message); console.error(e); }
+                finally { setAiLoading(false); }
+            };
+
+            const toggleMic = () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) return alert("Seu navegador não suporta reconhecimento de voz.");
+                if (isListening) { if (recognitionRef.current) recognitionRef.current.stop(); setIsListening(false); return; }
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'pt-BR'; recognition.continuous = false; recognition.interimResults = false;
+                recognition.onstart = () => setIsListening(true);
+                recognition.onresult = (e) => { setAiInput(prev => (prev ? prev + ' ' : '') + e.results[0][0].transcript); setIsListening(false); };
+                recognition.onerror = (e) => { console.error("Erro voz:", e); setIsListening(false); };
+                recognition.onend = () => setIsListening(false);
+                recognition.start(); recognitionRef.current = recognition;
+            };
+
+            /* Handlers */
+            const save = (col) => {
+                if(col === 'passengers' && !formData.name) return alert('Nome obrigatório');
+                if(col === 'drivers' && !formData.name) return alert('Nome obrigatório');
+                if (col === 'drivers' && !formData.status) formData.status = 'Ativo';
+                dbOp(formData.id?'update':'create', col, formData); setModal(null);
+            };
+
+            const saveNote = () => { if(!noteText.trim()) return; dbOp('create', 'notes', { text: noteText, completed: false }); setNoteText(''); };
+            const del = (col, id) => { 
+                if (user && user.role === 'operador' && col === 'passengers') {
+                    if (paxDeleteSessionCount >= 5) return alert('🔒 SEGURANÇA: Limite de exclusão de passageiros atingido nesta sessão.');
+                    if(confirm('Excluir este item permanentemente?')) { dbOp('delete', col, id); setPaxDeleteSessionCount(prev => prev + 1); } return;
+                }
+                if(confirm('Excluir este item permanentemente?')) dbOp('delete', col, id); 
+            };
+            const changeTheme = (t) => { setThemeKey(t); if(user) { dbOp('update', 'preferences', { theme: t }); localStorage.setItem(`${user.username}_nexflow_theme`, t); } };
+            const saveApiKey = (k) => { setGeminiKey(k); localStorage.setItem('nexflow_gemini_key', k); };
+            
+            const copyToClip = (txt) => {
+                const textArea = document.createElement("textarea"); textArea.value = txt; textArea.style.position = "fixed"; document.body.appendChild(textArea); textArea.focus(); textArea.select();
+                try { document.execCommand('copy'); alert(`Texto copiado!`); } catch (err) { prompt("Copie:", txt); } document.body.removeChild(textArea);
+            };
+            const copyPassengerData = (p) => { copyToClip(`*PASSAGEIRO*\n• Nome: ${p.name}\n• Tel: ${p.phone}\n• End: ${p.address}\n• Ref: ${p.reference||''}\n• Bairro: ${p.neighborhood}\n• Pagamento: ${p.payment}\n• Data: ${formatDisplayDate(p.date)} - ${p.time}\n• Qtd: ${p.passengerCount} pessoa(s)`); };
+            const copyDaySummary = () => {
+                const dayTrips = data.trips.filter(t => t.date === selectedDate).sort((a,b) => (a.time||'').localeCompare(b.time||''));
+                if (dayTrips.length === 0) return alert("Nenhuma viagem neste dia.");
+                let summary = `📅 RESUMO DO DIA ${formatDisplayDate(selectedDate)}\n\n`;
+                dayTrips.forEach(t => { const pList = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)); summary += `⏰ ${t.time} - ${t.driverName} (${t.status})\n`; pList.forEach(p => summary += `  - ${p.name} (${p.neighborhood})\n`); summary += `\n`; });
+                copyToClip(summary);
+            };
+            const callPhone = (ph) => { if(!ph) return alert("Sem número"); window.location.href = `tel:${ph.replace(/\D/g,'')}`; }
+            
+            const isBusy = (pid, date, time) => data.trips.some(t => t.date === date && t.time === time && t.status !== 'Cancelada' && (t.passengerIds||[]).map(String).includes(String(pid)) && t.id !== editingTripId);
+            const getPaxIdx = (l) => l.sort((a,b) => (b.passengerCount - a.passengerCount) || (getBairroIdx(a.neighborhood) - getBairroIdx(b.neighborhood)));
+
+            const simulate = () => {
+                const driver = data.drivers.find(d=>d.id==formData.driverId); const time = formData.time; const date = formData.date || getTodayDate(); 
+                if(!driver || !time) return alert('Selecione Motorista e Horário');
+                let pool = data.passengers.filter(p => p.status==='Ativo' && p.date === date && p.time === time && !isBusy(p.id, date, time) );
+                pool = getPaxIdx(pool);
+                let current = [], cap = 0;
+                for (const p of pool) { if (cap + parseInt(p.passengerCount) <= driver.capacity) { current.push(p); cap += parseInt(p.passengerCount); } }
+                current.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
+                setSuggestedTrip({ driver, time, passengers: current, occupancy: cap, date });
+            };
+
+            const autoFill = () => {
+                if(!suggestedTrip) return;
+                const tripDate = formData.date || suggestedTrip.date || getTodayDate(); const tripTime = formData.time || suggestedTrip.time;
+                let pool = data.passengers.filter(p => p.status==='Ativo' && p.date === tripDate && p.time === tripTime && !isBusy(p.id, tripDate, tripTime) && !suggestedTrip.passengers.find(x=>x.id===p.id));
+                pool = getPaxIdx(pool);
+                let current = [...suggestedTrip.passengers], cap = suggestedTrip.occupancy;
+                for(const p of pool) { if(cap + parseInt(p.passengerCount) <= suggestedTrip.driver.capacity) { current.push(p); cap += parseInt(p.passengerCount); } }
+                current.sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
+                setSuggestedTrip({...suggestedTrip, passengers: current, occupancy: cap, date: tripDate});
+            };
+
+            const addById = () => {
+                const term = searchId.toString(); const tripDate = formData.date || suggestedTrip.date; const tripTime = formData.time || suggestedTrip.time;
+                const p = data.passengers.find(x => (x.id && x.id === term) || (x.name && x.name.toLowerCase().includes(term.toLowerCase())));
+                if(!p) return alert('Não encontrado');
+                if(isBusy(p.id, tripDate, tripTime)) return alert(`Passageiro já em viagem`);
+                if(suggestedTrip.passengers.find(x=>x.id==p.id)) return alert('Já na lista');
+                if(suggestedTrip.occupancy + parseInt(p.passengerCount) > suggestedTrip.driver.capacity) return alert('Sem vaga');
+                const nw = [...suggestedTrip.passengers, p].sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
+                setSuggestedTrip({...suggestedTrip, passengers: nw, occupancy: suggestedTrip.occupancy + parseInt(p.passengerCount)});
+                setSearchId('');
+            };
+
+            const removePax = (pid) => {
+                const nw = suggestedTrip.passengers.filter(x => String(x.id) !== String(pid));
+                const removed = suggestedTrip.passengers.find(x => String(x.id) === String(pid));
+                if (removed) setSuggestedTrip({...suggestedTrip, passengers:nw, occupancy:suggestedTrip.occupancy-parseInt(removed.passengerCount)});
+            };
+            
+            const clearPaxSchedule = (pid) => {
+                if(confirm("Remover o horário deste passageiro? Ele sairá da lista de agendamentos.")) {
+                    dbOp('update', 'passengers', { id: pid, time: '' });
+                }
+            };
+
+            const confirmTrip = () => {
+                const driver = data.drivers.find(d => d.id === formData.driverId);
+                if (!driver) return alert("Selecione um motorista válido.");
+                // Ao confirmar/editar, removemos a flag isTemp (isTemp: false ou null)
+                const pl = { id: editingTripId, driverId: driver.id, driverName: driver.name, time: suggestedTrip.time, passengerIds: suggestedTrip.passengers.map(p=>p.id), date: formData.date || getTodayDate(), status: 'Em andamento', isTemp: false };
+                dbOp(editingTripId?'update':'create', 'trips', pl); setModal(null); setSuggestedTrip(null);
+            };
+
+            const openEditTrip = (t) => {
+                const dr = data.drivers.find(d=>d.id===t.driverId); const pax = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                const occ = pax.reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                setFormData({driverId:t.driverId, time:t.time, date: t.date}); setEditingTripId(t.id);
+                setSuggestedTrip({ driver:dr || {name: 'Desconhecido', capacity: 0}, time:t.time, passengers:pax, occupancy:occ, date: t.date });
+                setModal('trip');
+            };
+
+            const handleCreateTripFromPax = (p) => {
+                setFormData({ driverId: '', time: p.time, date: p.date });
+                setSuggestedTrip({ driver: { name: 'Selecione', capacity: 0 }, time: p.time, passengers: [p], occupancy: parseInt(p.passengerCount || 1), date: p.date });
+                setEditingTripId(null); setModal('trip');
+            };
+
+            const sendWhatsapp = (trip) => {
+                const d = data.drivers.find(x => x.id === trip.driverId); const p = data.passengers.filter(x => (trip.passengerIds||[]).includes(x.id));
+                if (!d || !d.phone) return alert('Motorista sem telefone.');
+                const msg = encodeURIComponent(generateWhatsappMessage(trip.id, p, d.name, trip.time, trip.date));
+                window.open(`https://wa.me/55${d.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+            };
+            // Ao atualizar status manualmente (Finalizar/Cancelar), também tornamos permanente (isTemp: false)
+            // Se for CANCELAR uma temporária, deleta de vez.
+            const updateTripStatus = (id, status) => { 
+                const trip = data.trips.find(t => t.id === id);
+                if (trip && trip.isTemp && status === 'Cancelada') {
+                    // Exclusão definitiva se for temporária e estiver sendo cancelada
+                    db.ref('trips').child(id).remove();
+                } else {
+                    db.ref('trips').child(id).update({status, isTemp: false});
+                }
+            };
+            const duplicateTrip = (t) => { if(!confirm('Duplicar esta viagem para hoje?')) return; dbOp('create', 'trips', { ...t, id: null, date: getTodayDate(), status: 'Ativo', isTemp: false }); };
+
+            const stats = useMemo(() => {
+                const pay = {}; const b = {};
+                data.passengers.forEach(x => { if(x.status==='Ativo') { pay[x.payment] = (pay[x.payment]||0)+1; b[x.neighborhood] = (b[x.neighborhood]||0)+1; } });
+                return { p: Object.entries(pay).map(([l,v])=>({label:l,value:v})), b: Object.entries(b).map(([l,v])=>({label:l,value:v})).sort((a,b)=>b.value-a.value).slice(0,5) };
+            }, [data]);
+
+            const filteredList = useMemo(() => {
+                let list = data[view] || [];
+                if(filterStatus === 'Ativo' && view !== 'lostFound') list = list.filter(i => !i.status || i.status === 'Ativo'); 
+                if (searchTerm) {
+                    const lower = searchTerm.toLowerCase().trim();
+                    const exactIdMatch = list.find(item => String(item.id) === lower);
+                    if (exactIdMatch) return [exactIdMatch];
+                    list = list.filter(item => (item.name && item.name.toLowerCase().includes(lower)) || (item.neighborhood && item.neighborhood.toLowerCase().includes(lower)) || (item.phone && item.phone.includes(lower)) || (item.description && item.description.toLowerCase().includes(lower)) || (String(item.id).toLowerCase().includes(lower)));
+                }
+                return list;
+            }, [data, view, filterStatus, searchTerm]);
+
+            const activeTrips = useMemo(() => data.trips.filter(t => t.status === 'Em andamento' || t.status === 'Ativo').sort((a,b) => parseInt(b.id) - parseInt(a.id)), [data.trips]);
+            const historyTrips = useMemo(() => data.trips.filter(t => t.status !== 'Em andamento' && t.status !== 'Ativo').sort((a,b) => parseInt(b.id) - parseInt(a.id)), [data.trips]);
+            const tripsForSelectedDate = useMemo(() => data.trips.filter(t => t.date === selectedDate).sort((a,b) => (a.time||'').localeCompare(b.time||'')), [data.trips, selectedDate]); 
+            const { pendingPax, assignedPax } = useMemo(() => {
+                const paxOfDay = data.passengers.filter(p => p.date === selectedDate);
+                const assigned = []; const pending = [];
+                paxOfDay.forEach(p => { 
+                    const isAssigned = data.trips.some(t => t.date === selectedDate && t.status !== 'Cancelada' && (t.passengerIds||[]).some(id => String(id) === String(p.id))); 
+                    if (isAssigned) assigned.push(p); 
+                    else if (p.time) pending.push(p); 
+                });
+                return { 
+                    pendingPax: pending.sort((a, b) => (a.time||'').localeCompare(b.time||'')), 
+                    assignedPax: assigned.sort((a, b) => (a.time||'').localeCompare(b.time||'')) 
+                };
+            }, [data.passengers, selectedDate, data.trips]);
+
+            // HISTORY GROUPING LOGIC
+            const historyGroups = useMemo(() => {
+                const targetMonth = historyDate.getMonth();
+                const targetYear = historyDate.getFullYear();
+                
+                const filtered = historyTrips.filter(t => {
+                    if(!t.date) return false;
+                    const [y, m, d] = t.date.split('-').map(Number);
+                    return (m - 1) === targetMonth && y === targetYear;
+                });
+
+                const groups = {};
+                filtered.forEach(t => {
+                    if(!groups[t.date]) groups[t.date] = [];
+                    groups[t.date].push(t);
+                });
+
+                const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+                
+                return sortedDates.map(date => ({
+                    date,
+                    trips: groups[date].sort((a, b) => (b.time || '').localeCompare(a.time || ''))
+                }));
+            }, [historyTrips, historyDate]);
+
+            const toggleHistoryDay = (date) => {
+                setExpandedDays(prev => ({...prev, [date]: !prev[date]}));
+            };
+
+            const prevHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() - 1, 1));
+            const nextHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() + 1, 1));
+
+
+            // Calendar
+            const getDaysInMonth = (date) => {
+                const year = date.getFullYear(); const month = date.getMonth();
+                const days = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
+                return { days, firstDay, month, year };
+            };
+            const renderCalendar = () => {
+                const { days, firstDay, month, year } = getDaysInMonth(calendarDate);
+                const monthName = calendarDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                const dayElements = [];
+                for(let i = 0; i < firstDay; i++) dayElements.push(<div key={`empty-${i}`} className="h-10"></div>);
+                for(let i = 1; i <= days; i++) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                    const isSelected = selectedDate === dateStr;
+                    const hasTrip = data.trips.some(t => t.date === dateStr); const hasPax = data.passengers.some(p => p.date === dateStr);
+                    dayElements.push(<button key={i} onClick={() => setSelectedDate(dateStr)} className={`h-10 w-full rounded-lg flex flex-col items-center justify-center relative transition-colors ${isSelected ? theme.primary : 'hover:bg-white/5'}`}><span className={`text-sm ${isSelected ? 'font-bold' : 'opacity-80'}`}>{i}</span><div className="flex gap-0.5 mt-0.5">{hasTrip && <div className="w-1 h-1 rounded-full bg-blue-400"></div>}{hasPax && <div className="w-1 h-1 rounded-full bg-green-400"></div>}</div></button>);
+                }
+                return { monthName, dayElements };
+            };
+            const { monthName, dayElements } = renderCalendar();
+
+            // Menu Items
+            const menuItems = [
+                {id:'dashboard',l:'Dashboard',i:Icons.Home}, {id:'appointments', l:'Agendamentos', i:Icons.Calendar}, {id:'passengers',l:'Passageiros',i:Icons.Users}, 
+                {id:'table', l: 'Tabela SP', i: Icons.List}, {id:'drivers',l:'Motoristas',i:Icons.Van}, {id:'trips',l:'Viagens',i:Icons.Map}, {id:'lostFound', l:'Perdidos e Achados', i:Icons.Box}
+            ];
+
+            const renderContextMenu = () => {
+                if (!contextMenu) return null;
+                const x = Math.min(contextMenu.x, window.innerWidth - 200);
+                const y = Math.min(contextMenu.y, window.innerHeight - 250);
+
+                return (
+                    <div 
+                        className={`fixed z-[9999] w-52 ${theme.card} ${theme.border} border shadow-2xl rounded-xl py-2 flex flex-col anim-fade`}
+                        style={{ top: y, left: x }}
+                    >
+                        <div className="px-4 py-2 text-xs font-bold opacity-50 uppercase tracking-wider border-b border-white/10 mb-1">Acesso Rápido</div>
+                        <button onClick={() => { setAiModal(true); setContextMenu(null); }} className="px-4 py-2.5 text-left hover:bg-white/10 flex items-center gap-3 text-sm transition-colors text-amber-400 font-bold">
+                            <Icons.Stars size={16}/> Cadastro Mágico
+                        </button>
+                        <div className="h-[1px] bg-white/10 my-1 mx-2"></div>
+                        <button onClick={() => { setView('passengers'); setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()}); setModal('passenger'); setContextMenu(null); }} className="px-4 py-2.5 text-left hover:bg-white/10 flex items-center gap-3 text-sm transition-colors">
+                            <Icons.Users size={16}/> Novo Passageiro
+                        </button>
+                        <button onClick={() => { setView('trips'); setSuggestedTrip(null); setModal('trip'); setContextMenu(null); }} className="px-4 py-2.5 text-left hover:bg-white/10 flex items-center gap-3 text-sm transition-colors">
+                            <Icons.Map size={16}/> Nova Viagem
+                        </button>
+                        <button onClick={() => { setView('drivers'); setFormData({status: 'Ativo'}); setModal('driver'); setContextMenu(null); }} className="px-4 py-2.5 text-left hover:bg-white/10 flex items-center gap-3 text-sm transition-colors">
+                            <Icons.Van size={16}/> Novo Motorista
+                        </button>
+                        <div className="h-[1px] bg-white/10 my-1 mx-2"></div>
+                        <button onClick={() => { setView('lostFound'); setFormData({date: getTodayDate(), status: 'Pendente'}); setModal('lostFound'); setContextMenu(null); }} className="px-4 py-2.5 text-left hover:bg-white/10 flex items-center gap-3 text-sm transition-colors opacity-80">
+                            <Icons.Box size={16}/> Perdido e Achado
+                        </button>
+                    </div>
+                );
+            };
+
+            if (!user) return <LoginScreen onLogin={handleLogin} />;
+
+            const currentRotatedList = getRotatedList(getTodayDate());
+            const analysisRotatedList = getRotatedList(analysisDate);
+            
+            const { confirmedTimes, startLousaTime } = getTableTimes();
+            
+            let lousaEffectiveIndex = 0;
+
+            return (
+                <div className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}>
+                    {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{menuItems.map(x=>(<button key={x.id} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
+                    <div className={`hidden md:flex w-64 flex-col border-r shrink-0 ${theme.border} ${theme.card}`}><div className={`h-20 flex items-center justify-center border-b ${theme.border}`}><h1 className="text-2xl font-bold">Bora de Van</h1></div><nav className="p-4 space-y-2 flex-1">{menuItems.map(x=>(<button key={x.id} onClick={()=>setView(x.id)} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-all ${view===x.id ? theme.primary : 'opacity-60 hover:opacity-100'}`}><x.i size={20}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors`} onClick={() => setView('settings')}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div>
+
+                    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                        <header className={`h-16 backdrop-blur-md border-b flex items-center justify-between px-4 shrink-0 z-20 ${theme.border}`}>
+                            <div className="flex items-center gap-3"><button onClick={()=>setMenuOpen(true)} className="md:hidden p-2 opacity-70"><Icons.Menu/></button><h2 className="text-lg font-bold capitalize">{view === 'appointments' ? 'Agendamentos' : view === 'lostFound' ? 'Perdidos e Achados' : view === 'table' ? 'Tabela SP' : view}</h2></div>
+                            {view !== 'dashboard' && view !== 'settings' && (<div className="flex gap-2">{view!=='trips'&&view!=='appointments'&&view!=='lostFound'&&view!=='table'&&<button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}<button onClick={()=>{setFormData(view==='passengers'?{neighborhood:BAIRROS[0],status: formData.status || 'Ativo', payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()}: view==='appointments' ? {date: getTodayDate(), driverId: ''} : view==='lostFound' ? {date: getTodayDate(), status: 'Pendente'} : view==='drivers' ? {status: 'Ativo'} : {}); if(view==='trips' || view==='appointments'){setSuggestedTrip(null); setEditingTripId(null);} setModal(view==='passengers'?'passenger':view==='drivers'?'driver':view==='lostFound'?'lostFound':'trip');}} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button></div>)}
+                        </header>
+
+                        <div className="flex-1 scroll-y p-4 space-y-6 pb-24 md:pb-8">
+                            
+                            {/* --- TABELA SP OMITTED FOR BREVITY AS NO CHANGES REQUESTED THERE --- */}
+                            {view === 'table' && (
+                                <div 
+                                    className="space-y-6 max-w-4xl mx-auto w-full min-h-[70vh]"
+                                    onTouchStart={onTouchStartTable}
+                                    onTouchMove={onTouchMoveTable}
+                                    onTouchEnd={onTouchEndTable}
+                                >
+                                    <div className="flex p-1 bg-black/20 rounded-xl border border-white/5 gap-1 overflow-x-auto">
+                                        <button onClick={()=>setTableTab('geral')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='geral' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Tabela</button>
+                                        <button onClick={()=>setTableTab('confirmados')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='confirmados' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Confirmados</button>
+                                        <button onClick={()=>setTableTab('lousa')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='lousa' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Lousa</button>
+                                        <button onClick={()=>setTableTab('madrugada')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='madrugada' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Madrugada</button>
+                                        <button onClick={()=>setTableTab('mensagens')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='mensagens' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Mensagens</button>
+                                    </div>
+                                    {/* ... Previous table content remains mostly same, just hiding for brevity in this response but keeping functionality ... */}
+                                    {/* (Assume table logic is preserved) */}
+                                    {tableTab === 'geral' && (
+                                        <div className={`${theme.card} p-5 rounded-xl border ${theme.border} anim-fade`}>
+                                            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                                                <h3 className="text-lg font-bold opacity-80">Tabela Geral</h3>
+                                                <div className="flex items-center gap-2 bg-black/30 p-1 rounded-lg">
+                                                    <button onClick={() => setAnalysisDate(dateAddDays(analysisDate, -1))} className="p-2 hover:bg-white/10 rounded-md"><Icons.ChevronLeft size={20}/></button>
+                                                    <div className="px-4 font-mono font-bold text-sm">{formatDisplayDate(analysisDate)}</div>
+                                                    <button onClick={() => setAnalysisDate(dateAddDays(analysisDate, 1))} className="p-2 hover:bg-white/10 rounded-md"><Icons.ChevronRight size={20}/></button>
+                                                    <button onClick={() => setAnalysisDate(currentOpDate)} className="ml-2 text-xs bg-white/10 px-2 py-1 rounded hover:bg-white/20">{currentOpDate === getTodayDate() ? 'Hoje' : 'Amanhã (Op)'}</button>
+                                                    <button onClick={() => handlePrint('print-tabela-list', 'Tabela_Geral', 'TABELA GERAL', { forceCols: 2 })} className="ml-4 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors" title="Salvar como Imagem (2 Colunas)"><Icons.Print size={20}/></button>
+                                                </div>
+                                            </div>
+                                            <div id="print-tabela-list" className="space-y-2">
+                                                {analysisRotatedList.map((driver, idx) => {
+                                                    const isOperational = analysisDate === currentOpDate;
+                                                    const status = isOperational ? tableStatus[driver.vaga] : null; 
+                                                    return (
+                                                        <div key={idx} className={`p-3 rounded-lg border ${theme.border} flex flex-col sm:flex-row sm:items-center justify-between bg-white/5 hover:bg-white/10 transition-colors gap-3`}>
+                                                            <div className="flex items-center gap-4"><div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center font-mono text-sm font-bold opacity-70 flex-shrink-0 leading-none pt-[1px]">{driver.vaga}</div><div className="flex items-center gap-2">{editName === driver.vaga ? (<div className="flex gap-1 hide-on-print"><input className="bg-black/50 border border-white/20 rounded px-2 py-1 text-sm w-32 outline-none focus:border-white/50" value={tempName} onChange={e=>setTempName(e.target.value)} autoFocus /><button onClick={()=>saveDriverName(driver.vaga)} className="text-green-400 hover:text-green-300"><Icons.CheckCircle size={18}/></button></div>) : (<><span className="font-bold text-lg">{driver.name}</span><button onClick={()=>{setEditName(driver.vaga); setTempName(driver.name)}} className="opacity-20 hover:opacity-100 transition-opacity hide-on-print"><Icons.Edit3 size={14}/></button></>)}</div></div>
+                                                            {isOperational && (<div className="flex items-center gap-2 hide-on-print">{!status ? (<><button onClick={() => updateTableStatus(driver.vaga, 'confirmed')} className="px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"><Icons.CheckCircle size={14}/> Confirmar</button><button onClick={() => updateTableStatus(driver.vaga, 'lousa')} className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"><Icons.List size={14}/> Lousa</button></>) : (<div className="flex items-center gap-2"><span className={`text-[10px] uppercase font-bold px-2 py-1 rounded border flex items-center gap-1 ${status==='confirmed'?'text-green-400 border-green-500/30 bg-green-500/10':'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'}`}>{status === 'confirmed' ? <Icons.CheckCircle size={10}/> : <Icons.List size={10}/>}{status === 'confirmed' ? 'Confirmado' : 'Na Lousa'}</span><button onClick={() => updateTableStatus(driver.vaga, null)} className="p-1 text-red-400 opacity-50 hover:opacity-100" title="Remover status"><Icons.X size={14}/></button></div>)}</div>)}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {tableTab === 'confirmados' && (
+                                        <div className="flex flex-col gap-4 anim-fade">
+                                            <div className={`${theme.card} p-5 rounded-xl border ${theme.border} border-green-500/30 relative overflow-hidden`}>
+                                                <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-2"><h3 className="text-lg font-bold text-green-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> CONFIRMADOS</h3><button onClick={() => handlePrint('print-confirmados-list', 'Confirmados', 'LISTA DE CONFIRMADOS', { mode: 'confirmados' })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.CheckCircle size={64}/></div>
+                                                <div id="print-confirmados-list" className="space-y-2 min-h-[100px]">
+                                                    {currentRotatedList.filter(d => tableStatus[d.vaga] === 'confirmed').map((driver) => {
+                                                        const timeStr = confirmedTimes[driver.vaga];
+                                                        const expired = isTimeExpired(timeStr);
+                                                        const isInLousa = lousaOrder.some(i => i.vaga === driver.vaga);
+                                                        
+                                                        return (
+                                                            <div key={driver.vaga} className={`flex justify-between items-center p-2 rounded-lg border transition-all ${expired ? 'bg-red-900/10 border-red-500/20 opacity-80' : 'bg-black/20 border-white/5'}`}>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`font-mono text-sm w-8 h-7 rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px] ${expired ? 'bg-red-500/20 text-red-300' : 'bg-green-900/50 text-green-200'}`}>{driver.vaga}</div>
+                                                                    <span className={`font-bold text-base ${expired ? 'line-through opacity-60' : ''}`}>{driver.name}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={`font-mono font-bold text-lg ${expired ? 'text-red-400 decoration-red-500 line-through' : 'text-green-400'}`}>{timeStr}</span>
+                                                                    {expired ? (
+                                                                        isInLousa ? (
+                                                                            <span className="text-[10px] font-bold text-yellow-500/70 uppercase border border-yellow-500/30 px-2 py-1 rounded bg-yellow-500/10">Na Lousa</span>
+                                                                        ) : (
+                                                                            <button onClick={() => sendToLousaKeepConfirmed(driver.vaga)} className="px-3 py-1 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg text-xs font-bold hover:bg-yellow-500/30 transition-colors shadow-lg animate-pulse">
+                                                                                Mover p/ Lousa
+                                                                            </button>
+                                                                        )
+                                                                    ) : (
+                                                                        <button onClick={() => handleLousaAction(null, 'remove_all', driver.vaga)} className="text-red-400 hover:text-red-300 transition-colors p-1 hide-on-print"><Icons.X size={14}/></button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {!currentRotatedList.some(d => tableStatus[d.vaga] === 'confirmed') && <div className="text-center opacity-30 text-sm py-10">Nenhum confirmado</div>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {tableTab === 'lousa' && (
+                                        <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} border-yellow-500/30 relative anim-fade`}>
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-white/10 pb-2 gap-3 sm:gap-0"><h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> LOUSA</h3><div className="flex w-full sm:w-auto justify-end"><button onClick={() => handlePrint('print-lousa-list', 'Lousa', 'LOUSA / FILA', { mode: 'lousa' })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.List size={64}/></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
+                                            <div id="print-lousa-list" className="space-y-2 min-h-[300px]">{lousaOrder.map((item, index) => { 
+                                                const vaga = item.vaga; 
+                                                const driver = spList.find(d => d.vaga === vaga) || { name: '' }; 
+                                                const isRiscado = item.riscado; 
+                                                let displayTime = '---'; 
+                                                let isExpired = false;
+
+                                                if (!isRiscado) { 
+                                                    const t = new Date(startLousaTime.getTime() + lousaEffectiveIndex * 30 * 60000); 
+                                                    displayTime = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); 
+                                                    isExpired = isTimeExpired(displayTime);
+                                                    lousaEffectiveIndex++; 
+                                                } 
+                                                
+                                                const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'lousa'; 
+                                                
+                                                return ( 
+                                                    <div key={item.uid} draggable="true" onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'lousa')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'lousa'); } else { handleTouchEnd(e, -1, 'lousa'); } }} className={`flex justify-between items-center p-2 rounded-lg border draggable-item ${isDraggingThis ? 'opacity-50 border-yellow-500 scale-105 shadow-2xl z-50 bg-yellow-900/40' : ''} ${isExpired ? 'bg-red-900/10 border-red-500/20 opacity-80' : (isRiscado ? 'bg-red-900/10 border-red-500/20 opacity-60' : 'bg-black/20 border-white/5')}`}> 
+                                                        <div className="flex items-center gap-3 min-w-0 flex-1"> 
+                                                            <div className={`font-mono text-xs w-8 h-7 rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px] ${isExpired ? 'bg-red-500/20 text-red-300' : 'bg-white/10 opacity-70'}`}>{vaga}</div> 
+                                                            <span className={`font-bold text-base truncate ${isRiscado || isExpired ? 'line-through' : ''} ${isExpired ? 'opacity-60' : ''}`}>{driver.name}</span> 
+                                                        </div> 
+                                                        <div className="flex items-center gap-1.5 flex-shrink-0"> 
+                                                            {!isRiscado && <span className={`font-mono font-bold text-lg mr-1 ${isExpired ? 'text-red-400 decoration-red-500 line-through' : 'text-yellow-400'}`}>{displayTime}</span>} 
+                                                            
+                                                            <button onClick={() => handleLousaAction(item.uid, 'duplicate', vaga)} className="p-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 hide-on-print flex-shrink-0" title="Duplicar vaga para o final da fila"> <Icons.Plus size={10}/> </button> 
+                                                            
+                                                            {!isExpired && (
+                                                                <button onClick={() => handleLousaAction(item.uid, 'riscar', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-white/10 text-white hide-on-print flex-shrink-0"> <div className={`${isRiscado ? 'text-red-500' : 'opacity-50'}`}> <Icons.Slash size={10}/> </div> </button> 
+                                                            )}
+                                                            
+                                                            <button onClick={() => handleLousaAction(item.uid, 'baixar', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-white/10 text-white hide-on-print flex-shrink-0"><Icons.ArrowDown size={10}/></button> 
+                                                            <button onClick={() => handleLousaAction(item.uid, 'remove', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-red-500/20 text-red-400 hide-on-print flex-shrink-0"><Icons.X size={12}/></button> 
+                                                        </div> 
+                                                    </div> 
+                                                ); 
+                                            })} {lousaOrder.length === 0 && <div className="text-center opacity-30 text-sm py-10">Lousa vazia</div>} </div>
+                                        </div>
+                                    )}
+                                    {tableTab === 'madrugada' && (
+                                        <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} anim-fade overflow-hidden`}>
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0"><h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3><div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto"><button onClick={addMadrugadaVaga} className="bg-green-600/20 text-green-400 border border-green-500/30 px-3 py-1 rounded text-xs font-bold hover:bg-green-600/30 whitespace-nowrap">Adicionar Vaga</button><div className="flex items-center gap-2"><span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span><button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA')} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
+                                            <div id="print-madrugada-list" className="space-y-2">{madrugadaList.map((vaga, index) => { const driver = spList.find(d => d.vaga === vaga) || { name: 'Desconhecido' }; const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; return ( <div key={`${vaga}-${index}`} draggable="true" onDragStart={(e) => handleMadrugadaDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleMadrugadaDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'madrugada')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'madrugada'); } else { handleTouchEnd(e, -1, 'madrugada'); } }} className={`flex flex-col md:flex-row items-center gap-2 p-3 bg-black/20 rounded-lg border border-white/5 draggable-item cursor-grab active:cursor-grabbing ${isDraggingThis ? 'opacity-50 border-indigo-500 scale-105 shadow-2xl z-50 bg-indigo-900/40' : ''}`}> <div className="flex items-center gap-3 w-full md:w-auto flex-1 relative min-w-0"> <div className="opacity-30 cursor-grab hide-on-print flex-shrink-0"><Icons.List size={14}/></div> <button onClick={() => removeMadrugadaVaga(vaga)} className="text-red-400 opacity-50 hover:opacity-100 hide-on-print flex-shrink-0"><Icons.Trash size={14}/></button> <button onClick={() => toggleMadrugadaRiscado(vaga)} className={`p-1 rounded hover:bg-white/10 flex-shrink-0 ${mData.riscado ? 'text-red-400' : 'text-white/30'} hide-on-print`}> <Icons.Slash size={14}/> </button> <div className="font-mono text-sm bg-indigo-500/20 text-indigo-300 w-[35px] h-[30px] rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px]">{vaga}</div> <div className="flex flex-col min-w-0 flex-1"> <span className={`font-bold text-lg truncate ${mData.riscado ? 'line-through opacity-50' : ''}`}>{driver.name}</span> {mData.riscado && mData.comment && ( <div className="text-[12px] text-red-300 bg-red-900/30 px-2 py-1 rounded w-fit flex items-center justify-center leading-none mt-1 truncate max-w-full">{mData.comment}</div> )} </div> </div> {!mData.riscado && ( <div className="flex items-center gap-2 w-full md:w-auto md:justify-end flex-shrink-0 mt-2 md:mt-0"> <div className="flex gap-2 hide-on-print w-full md:w-auto"> <input type="number" placeholder="Qtd" className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-20 text-center outline-none focus:border-indigo-500 transition-colors" value={mData.qtd} onChange={(e) => handleMadrugadaChange(vaga, 'qtd', e.target.value)} /> <select className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-32 outline-none focus:border-indigo-500 transition-colors" value={mData.time} onChange={(e) => handleMadrugadaChange(vaga, 'time', e.target.value)} > <option value="">Horário</option> <option value="4:00/4:45">04:00/45</option> <option value="5:00/5:45">05:00/45</option> <option value="6:00/6:45">06:00/45</option> </select> </div> <div className="show-on-print hidden font-bold text-indigo-200 text-lg"> <span>{mData.time}</span> {mData.qtd && <span className="ml-2 opacity-70">({mData.qtd})</span>} </div> </div> )} </div> ); })} {madrugadaList.length === 0 && <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada hoje.</div>} </div>
+                                        </div>
+                                    )}
+                                    {tableTab === 'mensagens' && (
+                                        <div className={`${theme.card} p-5 rounded-xl border ${theme.border} anim-fade`}>
+                                            <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold opacity-80 flex items-center gap-2"><Icons.Message size={20}/> Mensagens Prontas</h3><button onClick={addCannedMessage} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2"><Icons.Plus size={16}/> Nova Mensagem</button></div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {cannedMessages.map((msg, index) => ( <div key={msg.id} draggable="true" onDragStart={(e) => handleCannedDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleCannedDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'canned')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'canned'); } else { handleTouchEnd(e, -1, 'canned'); } }} className={`draggable-item bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-2 relative group hover:border-white/10 transition-colors ${draggedItem?.index === index && draggedItem?.listType === 'canned' ? 'opacity-50 border-blue-500 scale-105 z-50' : ''}`}> <div className="flex justify-between items-center pb-2 border-b border-white/5"> <div className="flex items-center gap-2 flex-1"> <div className="opacity-30 cursor-grab"><Icons.List size={14}/></div> <input className="bg-transparent text-sm font-bold w-full outline-none placeholder-white/30" value={msg.title} onChange={(e) => updateCannedMessage(msg.id, 'title', e.target.value)} placeholder="Título da Mensagem" /> </div> <button onClick={() => deleteCannedMessage(msg.id)} className="text-red-400 opacity-20 hover:opacity-100 transition-opacity p-1"> <Icons.X size={14}/> </button> </div> <textarea className="bg-black/30 rounded-lg p-2 text-sm w-full h-24 resize-none outline-none focus:bg-black/40 transition-colors border border-transparent focus:border-white/10" value={msg.text} onChange={(e) => updateCannedMessage(msg.id, 'text', e.target.value)} placeholder="Digite o texto da mensagem aqui..." /> <div className="flex justify-end pt-1"> <button onClick={() => copyToClip(msg.text)} className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors font-bold"> <Icons.Copy size={14}/> Copiar </button> </div> </div> ))}
+                                                {cannedMessages.length === 0 && (<div className="col-span-full py-10 text-center opacity-30 text-sm border-2 border-dashed border-white/10 rounded-xl">Nenhuma mensagem pronta. Clique em "Nova Mensagem" para criar.</div>)}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {(view === 'passengers' || view === 'drivers' || view === 'trips' || view === 'lostFound') && (
+                                <div className="mb-4">
+                                    <div className="relative">
+                                        <div className="absolute left-3 top-3 opacity-50"><Icons.Search size={20}/></div>
+                                        <input 
+                                            className={`w-full bg-black/10 border border-white/10 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-current transition-colors ${theme.text}`} 
+                                            placeholder="Pesquisar..." 
+                                            value={searchTerm} 
+                                            onChange={e => setSearchTerm(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {view === 'settings' && (
+                                <div className="space-y-6">
+                                    <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex items-center gap-4`}> <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> </div> <div> <h3 className="text-xl font-bold">{user.username}</h3> <p className="opacity-60 text-sm capitalize">{user.role}</p> <button onClick={handleLogout} className="mt-2 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-1"><Icons.LogOut size={12}/> Sair da Conta</button> </div> </div>
+                                    
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}>
+                                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Icons.Stars/> Configuração IA (Gemini)</h3>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="password" 
+                                                className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/50" 
+                                                placeholder="Cole sua API Key aqui..." 
+                                                value={geminiKey} 
+                                                onChange={e=>setGeminiKey(e.target.value)} 
+                                            />
+                                            <button onClick={()=>saveApiKey(geminiKey)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold">Salvar</button>
+                                        </div>
+                                        <p className="text-xs opacity-50 mt-2">Necessário para usar o Cadastro Mágico.</p>
+                                    </div>
+
+                                    {user.username === 'Breno' && (
+                                        <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}>
+                                            <h3 className="font-bold text-lg mb-4 text-red-400 flex items-center gap-2"><Icons.Shield/> Segurança e Bloqueios</h3>
+                                            <div className="flex flex-col md:flex-row gap-2 mb-4"><input className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm flex-1" placeholder="IP para bloquear" value={ipToBlock} onChange={e=>setIpToBlock(e.target.value)} /><button onClick={blockIp} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Bloquear</button></div>
+                                            <div className="space-y-2 max-h-40 overflow-y-auto mb-6">{data.blocked_ips && data.blocked_ips.map(item => (<div key={item.id} className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex justify-between items-center"><div><div className="text-sm font-bold font-mono">{item.ip}</div></div><button onClick={()=>del('blocked_ips', item.id)} className="text-red-400 hover:text-red-300 p-2"><Icons.Trash size={16}/></button></div>))}</div>
+                                            <h4 className="font-bold text-sm mb-3 border-t border-white/10 pt-3">Histórico de Acessos</h4>
+                                            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">{ipHistory.map((log) => { const safeIp = (log.ip||'').replace(/\./g, '_'); const currentLabel = ipLabels[safeIp] || ''; return (<div key={log.id} className="bg-white/5 p-2 rounded-lg text-xs flex flex-col gap-1 border border-white/5"><div className="flex justify-between opacity-60"><span>{new Date(log.timestamp).toLocaleString()}</span><span>{log.username}</span></div><div className="flex items-center gap-2"><span className="font-mono bg-black/30 px-1.5 rounded">{log.ip}</span><input className="bg-transparent border-b border-white/10 focus:border-white/50 outline-none flex-1 text-yellow-400" placeholder="Nota..." defaultValue={currentLabel} onBlur={(e) => saveIpLabel(log.ip, e.target.value)} /></div></div>); })}</div>
+                                        </div>
+                                    )}
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold text-lg mb-4">🎨 Temas</h3><div className="grid grid-cols-2 gap-3">{Object.keys(THEMES).map(k=>(<button key={k} onClick={()=>changeTheme(k)} className={`p-4 ${theme.radius} border flex items-center gap-2 ${themeKey===k ? theme.primary : 'border-transparent bg-black/10'}`}>{THEMES[k].name}</button>))}</div></div>
+                                </div>
+                            )}
+
+                            {view === 'dashboard' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-4"><div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><div className={`mb-2 ${theme.accent}`}><Icons.Users size={24}/></div><div className="text-2xl font-bold">{data.passengers.length}</div><div className="text-xs opacity-70">Passageiros</div></div><div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><div className={`mb-2 ${theme.accent}`}><Icons.Map size={24}/></div><div className="text-2xl font-bold">{data.trips.length}</div><div className="text-xs opacity-70">Viagens</div></div></div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} flex flex-col items-center relative`}><h3 className="font-bold mb-6 w-full flex justify-between items-center">💰 Métodos</h3>{stats.p.length ? <DonutChart data={stats.p} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div><div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-6 w-full">📍 Bairros</h3>{stats.b.length ? <HorizontalBarChart data={stats.b} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div></div>
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" placeholder="Adicionar lembrete..." value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyPress={e=> e.key === 'Enter' && saveNote()} /><button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button></div><div className="space-y-2 max-h-40 overflow-y-auto pr-1">{data.notes.map(note => (<div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group"><span>{note.text}</span><button onClick={()=>del('notes', note.id)} className="opacity-50 hover:opacity-100 text-red-400"><Icons.Trash size={14}/></button></div>))}</div></div>
+                                    <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
+                                </div>
+                            )}
+
+                            {view === 'lostFound' && (
+                                <div className="space-y-4">
+                                    {filteredList.map(item => ( <div key={item.id} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${item.status === 'Entregue' ? 'bg-green-500' : 'bg-yellow-500'}`}></div><div className="pl-3"><div className="flex justify-between items-start"><h3 className="font-bold text-lg">{item.description}</h3><span className={`text-xs px-2 py-0.5 rounded-full border ${item.status === 'Entregue' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>{item.status}</span></div><p className="text-sm opacity-70 mt-1">📍 {item.location} • 📅 {formatDisplayDate(item.date)}</p></div><div className="pl-3 flex justify-end gap-2 mt-3 pt-2 border-t border-white/10"><button onClick={() => { const newStatus = item.status === 'Pendente' ? 'Entregue' : 'Pendente'; dbOp('update', 'lostFound', { id: item.id, status: newStatus }); }} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">{item.status === 'Pendente' ? 'Marcar Entregue' : 'Marcar Pendente'}</button><IconButton theme={theme} variant="danger" onClick={()=>del('lostFound', item.id)} icon={Icons.Trash}/></div></div> ))}
+                                </div>
+                            )}
+
+                            {view === 'appointments' && (
+                                <div className="space-y-6">
+                                    <div className={`${theme.card} ${theme.radius} border ${theme.border} p-4`}><div className="flex items-center justify-between mb-4"><h3 className="font-bold text-lg capitalize">{monthName}</h3><div className="flex gap-2"><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()-1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronLeft size={20}/></button><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()+1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronRight size={20}/></button></div></div><div className="grid grid-cols-7 gap-1 text-center mb-2 text-xs opacity-60">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}</div><div className="grid grid-cols-7 gap-1">{dayElements}</div><div className="mt-4 pt-3 border-t border-white/10 flex gap-2"><button onClick={copyDaySummary} className="w-full bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"><Icons.Copy size={16}/> 📋 Copiar Resumo do Dia</button></div></div>
+                                    <div className="space-y-4">
+                                        <h3 className="font-bold text-lg border-b border-white/10 pb-2">📅 {formatDisplayDate(selectedDate)}</h3>
+                                        
+                                        <div className="space-y-3">
+                                            <h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-yellow-400">Passageiros Pendentes (Agendados)</h4>
+                                            {(() => {
+                                                if (pendingPax.length === 0) return <p className="text-sm opacity-40 italic pl-1">Todos os passageiros estão alocados ou sem horário.</p>;
+                                                
+                                                const grouped = pendingPax.reduce((acc, p) => {
+                                                    const t = p.time || 'Sem Horário';
+                                                    if (!acc[t]) acc[t] = [];
+                                                    acc[t].push(p);
+                                                    return acc;
+                                                }, {});
+                                                
+                                                const sortedTimes = Object.keys(grouped).sort();
+
+                                                return sortedTimes.map(time => (
+                                                    <div key={time} className="mb-4">
+                                                        <div className="flex items-center gap-2 mb-2 opacity-80">
+                                                            <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+                                                            <span className="font-bold font-mono text-lg">{time}</span>
+                                                            <div className="h-[1px] bg-white/10 flex-1"></div>
+                                                        </div>
+                                                        <div className="space-y-3 pl-2 border-l border-white/5">
+                                                            {grouped[time].map(p => (
+                                                                <div key={p.id} className={`${theme.card} ${theme.radius} border border-yellow-500/30 p-4 relative bg-yellow-500/5`}>
+                                                                    <div className="flex justify-between items-start mb-2">
+                                                                        <div>
+                                                                            <div className="font-bold text-lg">{p.name}</div>
+                                                                            <div className="text-xs opacity-70">{p.neighborhood}</div>
+                                                                        </div>
+                                                                        <div className="flex gap-2 items-center">
+                                                                            <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.luggageCount || 0}🎒</div>
+                                                                            <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.passengerCount}p</div>
+                                                                            
+                                                                            <button 
+                                                                                onClick={() => clearPaxSchedule(p.id)} 
+                                                                                className="ml-1 p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                                                                                title="Remover Agendamento (Limpar Horário)"
+                                                                            >
+                                                                                <Icons.CalendarX size={16} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
+                                                                        <button onClick={() => sendPaxWhatsapp(p)} className="flex-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Icons.Phone size={16}/> WhatsApp</button>
+                                                                        <button onClick={() => handleCreateTripFromPax(p)} className="flex-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Icons.Plus size={16}/> Criar Viagem</button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ));
+                                            })()}
+                                        </div>
+
+                                        <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-blue-400">Em Viagem</h4>{assignedPax.length > 0 ? (assignedPax.map(p => (<div key={p.id} className={`${theme.card} ${theme.radius} border border-white/5 p-3 relative opacity-60 hover:opacity-100 transition-opacity`}><div className="flex justify-between items-center"><div><div className="font-bold">{p.name}</div><div className="text-xs opacity-70">{p.neighborhood} • {p.time}</div></div><div className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Em Viagem</div></div></div>))) : (<p className="text-sm opacity-40 italic pl-1">Nenhum.</p>)}</div>
+                                        <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1">Viagens do Dia</h4>{tripsForSelectedDate.length > 0 ? (tripsForSelectedDate.map(t => { const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0); let statusColor = 'bg-blue-500'; if(t.status === 'Finalizada') statusColor = 'bg-green-500'; if(t.status === 'Cancelada') statusColor = 'bg-red-500'; return (<div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-4 flex justify-between items-center relative overflow-hidden`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColor}`}></div><div><div className="font-bold flex items-center gap-2">{t.driverName}<span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${statusColor.replace('bg-', 'border-').replace('500', '500/50')} ${statusColor.replace('bg-', 'text-').replace('500', '400')} bg-transparent`}>{t.status}</span></div><div className="text-xs opacity-70 flex gap-2 mt-1"><span>🕒 {calculateTimeSlot(t.time)}</span><span>👥 {pCount} pax</span></div></div><IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" /></div>); })) : (<p className="text-sm opacity-40 italic pl-1">Nenhuma viagem.</p>)}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {view === 'passengers' && (
+                                <div className="space-y-3">
+                                    {filteredList.map(item => (<div key={item.id} onClick={() => setExpandedPax(expandedPax === item.id ? null : item.id)} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform`}><div className="absolute top-1 right-8 text-4xl font-bold opacity-[0.07] pointer-events-none">#{item.id}</div><div className="absolute top-3 right-3 text-xs opacity-50">{expandedPax === item.id ? <Icons.ChevronUp size={18}/> : <Icons.ChevronDown size={18}/>}</div><div className="pr-8"><div className="flex flex-wrap gap-2 mb-1">{item.tags && item.tags.split(',').map((tag, i) => (<span key={i} className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase">{tag.trim()}</span>))}</div><h3 className="font-bold text-lg">{item.name}</h3><p className="text-sm opacity-70">{item.neighborhood}</p></div>{expandedPax === item.id && (<div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm expand-content anim-fade"><div className="grid grid-cols-2 gap-4"><div><span className="block opacity-50 text-xs">TELEFONE</span>{item.phone}</div><div><span className="block opacity-50 text-xs">PAGAMENTO</span>{item.payment}</div><div className="col-span-2"><span className="block opacity-50 text-xs">ENDEREÇO</span>{item.address} {item.reference ? `(${item.reference})` : ''}</div><div><span className="block opacity-50 text-xs">DATA/HORA</span>{formatDisplayDate(item.date)} - {item.time}</div><div><span className="block opacity-50 text-xs">DETALHES</span>{item.passengerCount} pax | {item.luggageCount || 0} malas</div><div><span className="block opacity-50 text-xs">STATUS</span><span className={item.status === 'Ativo' ? 'text-green-400' : 'text-red-400'}>{item.status}</span></div></div><div className="flex gap-2 pt-4 mt-2"><Button theme={theme} onClick={(e)=>{e.stopPropagation(); setFormData(item); setModal('passenger')}} variant="secondary" className="flex-1 py-2 text-sm" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="default" onClick={(e)=>{e.stopPropagation(); copyPassengerData(item)}} icon={Icons.Copy}/>{item.phone && <IconButton theme={theme} variant="success" onClick={(e)=>{e.stopPropagation(); callPhone(item.phone)}} icon={Icons.Phone}/>}<IconButton theme={theme} variant="danger" onClick={(e)=>{e.stopPropagation(); del(view, item.id)}} icon={Icons.Trash}/></div></div>)}</div>))}
+                                    {!filteredList.length && <div className="text-center opacity-50 py-10">Nenhum passageiro.</div>}
+                                </div>
+                            )}
+
+                            {(view === 'drivers') && (
+                                <div className="space-y-3">
+                                    {filteredList.map(item => (<div key={item.id} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden flex flex-col gap-4 group`}><div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase tracking-wider ${item.status === 'Ativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{item.status}</div><div className="flex items-center gap-4"><div className={`w-16 h-16 rounded-full p-1 border-2 ${item.status === 'Ativo' ? 'border-green-500/50' : 'border-red-500/50'} flex-shrink-0`}><img src={getAvatarUrl(item.name)} alt="Avatar" className="w-full h-full rounded-full bg-slate-700/50"/></div><div className="flex-1 min-w-0"><h3 className="font-bold text-lg truncate">{item.name}</h3><div className="flex items-center gap-2 text-sm opacity-60"><span className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">{item.plate || 'SEM PLACA'}</span><span>•</span><span className="flex items-center gap-1"><Icons.Users size={12}/> {item.capacity} lug</span></div></div></div><div className="grid grid-cols-2 gap-3 bg-black/20 p-3 rounded-lg text-xs"><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">Telefone</span><span className="font-mono">{item.phone || '-'}</span></div><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">CNH Validade</span><span className={`${item.cnhValidity && new Date(item.cnhValidity) < new Date() ? 'text-red-400 font-bold' : ''}`}>{item.cnhValidity ? formatDisplayDate(item.cnhValidity) : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => { const msg = encodeURIComponent(`Olá ${item.name}, tudo bem?`); window.open(`https://wa.me/55${(item.phone||'').replace(/\D/g,'')}?text=${msg}`, '_blank'); }} className="flex-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-colors"><Icons.Phone size={14}/> WhatsApp</button><Button theme={theme} onClick={()=>{setFormData(item); setModal('driver')}} variant="secondary" className="px-3 py-2 text-xs" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="danger" onClick={()=>del('drivers', item.id)} icon={Icons.Trash}/></div></div>))}
+                                    {!filteredList.length && <div className="text-center opacity-50 py-10">Vazio.</div>}
+                                </div>
+                            )}
+
+                            {view === 'trips' && (
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest pl-1">Hoje / Em Andamento</h3>
+                                        {activeTrips.slice().reverse().map(t => {
+                                            const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                                            const tripPassengers = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                                            return (
+                                                <div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-5 relative overflow-hidden shadow-lg ${t.isTemp ? 'border-dashed border-yellow-500/50' : ''}`}>
+                                                    {t.isTemp && (
+                                                        <div className="absolute top-0 right-0 flex">
+                                                            <div className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg flex items-center gap-1">
+                                                                <span>Temporária (Auto)</span>
+                                                                <span className="w-[1px] h-3 bg-yellow-500/30 mx-1"></span>
+                                                                <span className="flex items-center gap-1"><Icons.Clock size={10}/> <TempTripTimer date={t.date} time={t.time} /></span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div>
+                                                            <h3 className="font-bold text-lg">Viagem #{t.id}</h3>
+                                                            <div className={`${theme.accent} font-bold text-sm mt-1`}>{calculateTimeSlot(t.time)}</div>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" />
+                                                            <IconButton theme={theme} onClick={()=>del('trips', t.id)} icon={Icons.Trash} variant="danger" />
+                                                        </div>
+                                                    </div>
+                                                    <div className={`bg-black/20 p-3 rounded-lg mb-4 flex justify-between items-center border ${theme.border}`}>
+                                                        <div className="flex items-center gap-2 text-sm opacity-80"><Icons.Car size={16}/> {t.driverName}</div>
+                                                        <div className="flex items-center gap-2 text-sm font-bold"><Icons.Users size={16}/> {pCount}</div>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-2 mb-4">
+                                                        <Button theme={theme} onClick={()=>updateTripStatus(t.id, 'Finalizada')} variant="success" size="sm" icon={Icons.Check}>Finalizar</Button>
+                                                        <Button theme={theme} disabled={true} className="opacity-50" variant="secondary" size="sm">Andamento</Button>
+                                                        <Button theme={theme} onClick={()=>updateTripStatus(t.id, 'Cancelada')} variant="danger" size="sm" icon={Icons.X}>Cancelar</Button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={()=>copyToClip(generateTripListText(tripPassengers, t.driverName, t.time))} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm"><Icons.Copy size={18}/> Copiar Lista</button>
+                                                        <button onClick={()=>sendWhatsapp(t)} className="flex-[2] bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"><Icons.Send size={18}/> WhatsApp</button>
+                                                    </div>
+                                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                                        <button onClick={()=>duplicateTrip(t)} className="w-full bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"><Icons.Repeat size={16}/> Duplicar para Hoje</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* --- ADVANCED HISTORY SECTION --- */}
+                                    <div className="space-y-4 pt-6 border-t border-white/10">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-sm font-bold opacity-50 uppercase tracking-widest pl-1">Histórico</h3>
+                                            <div className="flex items-center gap-3 bg-black/20 p-1 rounded-lg">
+                                                <button onClick={prevHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronLeft size={18}/></button>
+                                                <span className="text-sm font-bold capitalize">{historyDate.toLocaleDateString('pt-BR', {month:'long', year:'numeric'})}</span>
+                                                <button onClick={nextHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronRight size={18}/></button>
+                                            </div>
+                                        </div>
+
+                                        {historyGroups.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {historyGroups.map(group => {
+                                                    const isExpanded = expandedDays[group.date];
+                                                    const dateParts = group.date.split('-');
+                                                    const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+                                                    const dayName = dateObj.toLocaleDateString('pt-BR', {weekday: 'long'});
+
+                                                    return (
+                                                        <div key={group.date} className={`${theme.card} rounded-xl border border-white/5 overflow-hidden`}>
+                                                            <div 
+                                                                onClick={() => toggleHistoryDay(group.date)}
+                                                                className="p-4 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`text-xs p-1 rounded-lg transition-transform ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown/></div>
+                                                                    <div>
+                                                                        <div className="font-bold text-base">{formatDisplayDate(group.date)}</div>
+                                                                        <div className="text-xs opacity-50 capitalize">{dayName}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-xs font-bold bg-white/10 px-2 py-1 rounded">{group.trips.length} viagens</div>
+                                                            </div>
+                                                            
+                                                            {isExpanded && (
+                                                                <div className="bg-black/20 border-t border-white/5 p-3 space-y-2 anim-fade">
+                                                                    {group.trips.map(t => (
+                                                                        <div key={t.id} className="bg-white/5 p-3 rounded-lg flex justify-between items-center hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
+                                                                            <div className="flex items-center gap-3">
+                                                                                 <div className={`w-1 h-8 rounded-full ${t.status === 'Finalizada' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                                                                 <div>
+                                                                                    <div className="font-bold text-sm">{t.time} - {t.driverName}</div>
+                                                                                    <div className="text-xs opacity-50">#{t.id} • {t.status}</div>
+                                                                                 </div>
+                                                                            </div>
+                                                                            <div className="flex gap-2">
+                                                                                <button onClick={()=>updateTripStatus(t.id, 'Em andamento')} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20" title="Reabrir"><Icons.Back size={16}/></button>
+                                                                                <button onClick={()=>openEditTrip(t)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20" title="Ver/Editar"><Icons.Edit size={16}/></button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">
+                                                Nenhuma viagem no histórico deste mês.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {modal && (
+                        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-4">
+                            <div className={`${theme.card} w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-xl rounded-t-3xl md:rounded-2xl border ${theme.border} shadow-2xl flex flex-col`}>
+                                <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 shrink-0"><h2 className="text-xl font-bold">{modal==='trip'?'Criar Viagem':modal==='passenger'?'Passageiro':modal==='driver'?'Motorista':'Perdido & Achado'}</h2><button onClick={()=>setModal(null)} className="opacity-50"><Icons.X size={24}/></button></div>
+                                <div className="flex-1 scroll-y p-6 space-y-5 pb-10">
+                                    <Input themeKey={themeKey} label="Data" type="date" value={formData.date || getTodayDate()} onChange={e=>setFormData({...formData, date:e.target.value})} />
+                                    {modal === 'passenger' && (<><Input themeKey={themeKey} label="Nome" value={formData.name||''} onChange={e=>setFormData({...formData, name:e.target.value})} /><Input themeKey={themeKey} label="Telefone" type="tel" value={formData.phone||''} onChange={e=>setFormData({...formData, phone:e.target.value})} /><Input themeKey={themeKey} label="Endereço" value={formData.address||''} onChange={e=>setFormData({...formData, address:e.target.value})} /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Bairro</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.neighborhood} onChange={e=>setFormData({...formData, neighborhood:e.target.value})}>{BAIRROS.map(b=><option key={b} value={b} className="bg-slate-900">{b}</option>)}</select></div><Input themeKey={themeKey} label="Referência" value={formData.reference||''} onChange={e=>setFormData({...formData, reference:e.target.value})} /><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="Horário (ex: 17:30)" type="time" value={formData.time||''} onChange={e=>setFormData({...formData, time:e.target.value})} /><Input themeKey={themeKey} label="Qtd Pax" type="number" value={formData.passengerCount||''} onChange={e=>setFormData({...formData, passengerCount:e.target.value})} /></div><Input themeKey={themeKey} label="Qtd Malas" type="number" value={formData.luggageCount||''} onChange={e=>setFormData({...formData, luggageCount:e.target.value})} /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Etiquetas (Tags)</label><input className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 w-full outline-none focus:border-current transition-colors" placeholder="Ex: Criança, Pagamento Mensal..." value={formData.tags||''} onChange={e=>setFormData({...formData, tags:e.target.value})} /></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Pagamento</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.payment} onChange={e=>setFormData({...formData, payment:e.target.value})}>{['Dinheiro','Pix','Cartão'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Ativo','Inativo'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('passengers')}>Salvar</Button></div></>)}
+                                    {modal === 'driver' && (<><Input themeKey={themeKey} label="Nome" value={formData.name||''} onChange={e=>setFormData({...formData, name:e.target.value})} /><Input themeKey={themeKey} label="Telefone" type="tel" value={formData.phone||''} onChange={e=>setFormData({...formData, phone:e.target.value})} /><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="Placa" value={formData.plate||''} onChange={e=>setFormData({...formData, plate:e.target.value})} /><Input themeKey={themeKey} label="Capacidade" type="number" value={formData.capacity||''} onChange={e=>setFormData({...formData, capacity:e.target.value})} /></div><div className="grid grid-cols-2 gap-4"><Input themeKey={themeKey} label="CNH" value={formData.cnh||''} onChange={e=>setFormData({...formData, cnh:e.target.value})} /><Input themeKey={themeKey} label="Validade CNH" type="date" value={formData.cnhValidity||''} onChange={e=>setFormData({...formData, cnhValidity:e.target.value})} /></div><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Ativo','Inativo'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('drivers')}>Salvar</Button></div></>)}
+                                    {modal === 'madrugadaVaga' && (
+                                        <div className="space-y-6">
+                                            <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm text-yellow-200">
+                                                Digite o número da vaga que deseja adicionar à lista da Madrugada de hoje/amanhã.
+                                            </div>
+                                            <Input 
+                                                themeKey={themeKey} 
+                                                label="Número da Vaga" 
+                                                value={tempVagaMadrugada} 
+                                                onChange={e => setTempVagaMadrugada(e.target.value)} 
+                                                placeholder="Ex: 05"
+                                                autoFocus
+                                            />
+                                            <div className="pt-4">
+                                                <Button themeKey={themeKey} onClick={confirmAddMadrugadaVaga} icon={Icons.Check}>Adicionar Vaga</Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {modal === 'madrugadaBlock' && (
+                                        <div className="space-y-6">
+                                            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-200">
+                                                Justifique o por que riscou a vaga <span className="font-bold font-mono">{vagaToBlock}</span> na Madrugada.
+                                            </div>
+                                            <Input 
+                                                themeKey={themeKey} 
+                                                label="Motivo (Opcional)" 
+                                                value={tempJustification} 
+                                                onChange={e => setTempJustification(e.target.value)} 
+                                                placeholder="Ex: Quebrou, Médico, Folga..."
+                                                autoFocus
+                                            />
+                                            <div className="pt-4 grid grid-cols-2 gap-3">
+                                                <Button themeKey={themeKey} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button>
+                                                <Button themeKey={themeKey} onClick={confirmMadrugadaBlock} icon={Icons.Check} variant="danger">Bloquear</Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {modal === 'trip' && ( <>{!suggestedTrip ? ( <div className="space-y-6"><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Motorista</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.driverId||''} onChange={e=>setFormData({...formData, driverId:e.target.value})}><option value="" className="bg-slate-900">Selecione...</option>{data.drivers.filter(d=>d.status==='Ativo').map(d=><option key={d.id} value={d.id} className="bg-slate-900">{d.name} ({d.capacity} lug)</option>)}</select></div><Input themeKey={themeKey} label="Horário (ex: 17:30)" type="time" value={formData.time||''} onChange={e=>setFormData({...formData, time:e.target.value})} /><div className="text-center font-bold opacity-80">{calculateTimeSlot(formatTime(formData.time||''))}</div><Button themeKey={themeKey} onClick={simulate} icon={Icons.Zap}>Gerar Rota</Button></div> ) : ( <div className="flex flex-col h-full"><div className="bg-black/10 p-5 rounded-xl border border-white/10 flex-1 flex flex-col"><div className="flex flex-col gap-1 mb-4"><label className="text-xs font-bold opacity-60">Motorista</label><select className="bg-black/20 border border-white/10 text-white rounded-xl px-3 py-2 w-full" value={formData.driverId} onChange={(e) => { const dr = data.drivers.find(d => d.id === e.target.value); setFormData({...formData, driverId: e.target.value}); setSuggestedTrip({...suggestedTrip, driver: dr || {name:'Selecione', capacity:0}}); }}><option value="" className="bg-slate-900">Selecione...</option>{data.drivers.filter(d => d.status === 'Ativo').map(d => (<option key={d.id} value={d.id} className="bg-slate-900">{d.name} ({d.capacity} lug)</option>))}</select></div><div className="flex justify-between items-center mb-4"><span className="font-bold text-lg">{suggestedTrip.driver.name}</span><span className={`text-sm px-3 py-1 rounded-full font-bold ${suggestedTrip.occupancy > suggestedTrip.driver.capacity ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{suggestedTrip.occupancy} / {suggestedTrip.driver.capacity}</span></div><div className="flex gap-2 mb-4"><input className="bg-black/20 border border-white/10 rounded-xl px-4 flex-1 h-12" placeholder="ID Passageiro" value={searchId} onChange={e=>setSearchId(e.target.value)} /><button onClick={addById} className="bg-white/10 px-4 rounded-xl font-bold h-12">Add</button></div><button onClick={autoFill} className={`w-full mb-4 py-3 bg-white/5 border border-white/10 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-white/10 anim-fade ${theme.accent}`}><Icons.Refresh size={20}/> 🤖 Puxar Passageiros (Auto)</button><div className="space-y-3 overflow-y-auto flex-1 pr-1 scroll-y max-h-[35vh]">{suggestedTrip.passengers.map((p, i) => (<div key={p.id} className={`${theme.bg} p-3 rounded-xl border ${theme.border} flex justify-between items-center shadow-sm`}><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${theme.primary}`}>{i+1}</div><div><div className="text-base font-bold">{p.name}</div><div className="text-xs opacity-60">{p.neighborhood}</div></div></div><div className="flex items-center gap-3"><span className={`${theme.accent} font-bold text-base`}>{p.passengerCount}p</span><button onClick={()=>removePax(p.id)} className="text-red-400 p-2"><Icons.Trash size={20}/></button></div></div>))}</div></div><div className="grid grid-cols-2 gap-3 pt-4"><Button themeKey={themeKey} variant="secondary" onClick={()=>setSuggestedTrip(null)}>Voltar</Button><Button themeKey={themeKey} onClick={confirmTrip} variant="success">Confirmar</Button></div></div> )}</> )}
+                                    {modal === 'lostFound' && ( <><Input themeKey={themeKey} label="O que foi encontrado?" value={formData.description||''} onChange={e=>setFormData({...formData, description:e.target.value})} placeholder="Ex: Guarda-chuva preto" /><Input themeKey={themeKey} label="Local / Veículo" value={formData.location||''} onChange={e=>setFormData({...formData, location:e.target.value})} placeholder="Ex: Van do João" /><Input themeKey={themeKey} label="Detalhes Adicionais" value={formData.details||''} onChange={e=>setFormData({...formData, details:e.target.value})} placeholder="Ex: Banco de trás, lado esquerdo" /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Pendente','Entregue'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('lostFound')}>Salvar</Button></div></> )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {aiModal && ( <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className={`w-full max-w-lg ${theme.card} p-6 rounded-2xl`}><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Icons.Stars/> Cadastro Mágico</h3><p className="text-sm opacity-60 mb-4">Digite ou cole (ex: "Maria vai pro Boqueirão as 18h pagando Pix")</p><textarea className="w-full h-32 bg-black/20 p-4 rounded-xl border border-white/10 mb-4 text-base" value={aiInput} onChange={e=>setAiInput(e.target.value)} placeholder="Digite aqui..."></textarea><div className="flex justify-between items-center"><button onClick={toggleMic} className={`p-3 rounded-full ${isListening ? 'listening text-white' : 'bg-white/10 text-slate-400'}`}><Icons.Mic size={24}/></button><div className="flex gap-3"><Button themeKey={themeKey} variant="secondary" onClick={()=>setAiModal(false)}>Cancelar</Button><Button themeKey={themeKey} variant="primary" onClick={handleSmartCreate} disabled={aiLoading}>{aiLoading ? '...' : 'Criar'}</Button></div></div></div></div> )}
+                    {renderContextMenu()}
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root')); root.render(<App />);
+    </script>
+</body>
+</html>
