@@ -850,9 +850,18 @@
                 
                 setIsVisible(false); // Esconde ao mudar de passo
 
+                // CORREÇÃO 1: Se não tem target (Card Inicial/Final), exibe na hora sem delay
+                if (!step.target) {
+                    setTargetRect(null);
+                    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                    // Centraliza na tela considerando o scroll atual
+                    setPosition({ top: window.innerHeight/2 + scrollTop - 150, left: window.innerWidth/2 - 160 });
+                    setArrowPos(null);
+                    setIsVisible(true);
+                    return;
+                }
+
                 const findTarget = (retryCount = 0) => {
-                    // CORREÇÃO: Busca todos os elementos possíveis (Desktop e Mobile)
-                    // O seletor pode ser múltiplo ex: "#sidebar-nav, #mobile-sidebar"
                     const targets = document.querySelectorAll(step.target);
                     let target = null;
                     const isMobile = window.innerWidth < 768;
@@ -869,8 +878,6 @@
                     // Verifica se o alvo existe e se está visível (largura > 0)
                     if (target) {
                         const rect = target.getBoundingClientRect();
-                        
-                        // Ajuste para rolagem da página (rect é relativo à viewport, precisamos somar scrollY)
                         const scrollTop = window.scrollY || document.documentElement.scrollTop;
                         const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
 
@@ -888,9 +895,16 @@
 
                         // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
                         if (step.placement === 'top') {
-                            // CORREÇÃO IA: Aumentei o offset no mobile para subir mais o balão
-                            tooltipTop = rect.top + scrollTop - (isMobile ? 280 : 240); // Altura estimada do card
-                            tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
+                            tooltipTop = rect.top + scrollTop - (isMobile ? 280 : 240);
+                            
+                            // CORREÇÃO 2: No mobile, se for 'top', força centralização horizontal na tela
+                            // Isso evita que o card "suma pro lado" se o elemento alvo estiver descentralizado
+                            if (isMobile) {
+                                tooltipLeft = (window.innerWidth / 2) - 160;
+                            } else {
+                                tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
+                            }
+                            
                             arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                         } else if (step.placement === 'right' && !isMobile) {
                             tooltipTop = rect.top + scrollTop; 
@@ -904,7 +918,6 @@
                             // --- AUTO CORREÇÃO INTELIGENTE ---
                             if (rect.height > window.innerHeight * 0.7 && rect.left < window.innerWidth / 2) {
                                 if (isMobile) {
-                                    // Se for menu mobile, centraliza na tela
                                     tooltipTop = scrollTop + 150; 
                                     tooltipLeft = window.innerWidth / 2 - 160;
                                     arrow = null; 
@@ -921,33 +934,36 @@
                         }
 
                         // AJUSTES FINAIS DE BORDA (CRÍTICO PARA MOBILE)
-                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85);
+                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85); // Largura real do tooltip
                         
-                        if (tooltipLeft < 10) { 
-                            tooltipLeft = 10;
-                            if (arrow && arrow.left === '50%') arrow.left = (rect.left + scrollLeft + rect.width/2) - 10 + 'px'; 
-                        }
+                        // Garante margem esquerda
+                        if (tooltipLeft < 10) tooltipLeft = 10;
                         
+                        // Garante margem direita
                         if (tooltipLeft + tooltipWidth > window.innerWidth) {
                             tooltipLeft = window.innerWidth - tooltipWidth - 10;
-                            if (arrow && arrow.left === '50%') {
-                                let arrowOffset = (rect.left + scrollLeft + rect.width/2) - tooltipLeft;
-                                arrowOffset = Math.max(10, Math.min(tooltipWidth - 20, arrowOffset));
-                                arrow.left = arrowOffset + 'px';
-                                arrow.transform = 'translateX(0) rotate(45deg)'; 
-                            }
+                        }
+
+                        // Recalcula a posição da seta para apontar para o alvo, mesmo se o balão moveu
+                        if (arrow && arrow.left === '50%') {
+                            // Centro do alvo relativo ao balão
+                            let targetCenterRelative = (rect.left + scrollLeft + rect.width/2) - tooltipLeft;
+                            // Limita a seta dentro das bordas arredondadas do balão (min 20px, max width-20px)
+                            targetCenterRelative = Math.max(20, Math.min(tooltipWidth - 20, targetCenterRelative));
+                            
+                            arrow.left = targetCenterRelative + 'px';
+                            arrow.transform = arrow.transform.replace('translateX(-50%)', 'translateX(0)');
                         }
 
                         setPosition({ top: tooltipTop, left: tooltipLeft });
                         setArrowPos(arrow);
                         setIsVisible(true); // Mostra o tooltip
                         
-                        // Scroll suave garantindo que o elemento fique no meio (ou fim se for footer)
                         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
                     } else {
                         // RETRY SYSTEM: Se não achou (ex: menu animando), tenta de novo em breve
-                        if (retryCount < 8) { // Aumentei tentativas para dar tempo da animação do menu
+                        if (retryCount < 8) { 
                             setTimeout(() => findTarget(retryCount + 1), 250);
                         } else {
                             // Fallback se falhar tudo
