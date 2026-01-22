@@ -841,111 +841,124 @@
             const [targetRect, setTargetRect] = useState(null);
             const [position, setPosition] = useState({ top: 0, left: 0 });
             const [arrowPos, setArrowPos] = useState({});
+            const [isVisible, setIsVisible] = useState(false); // Evita mostrar antes de calcular
             
             // Effect para calcular posição do destaque
             useEffect(() => {
                 const step = steps[currentStep];
                 if (!step) return;
+                
+                setIsVisible(false); // Esconde ao mudar de passo
 
-                const updatePosition = () => {
+                const findTarget = (retryCount = 0) => {
                     const target = document.querySelector(step.target);
                     const isMobile = window.innerWidth < 768;
 
-                    if (target) {
+                    // Verifica se o alvo existe e se está visível (largura > 0)
+                    if (target && target.getBoundingClientRect().width > 0) {
                         const rect = target.getBoundingClientRect();
+                        
+                        // Ajuste para rolagem da página (rect é relativo à viewport, precisamos somar scrollY)
+                        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                        const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+
                         setTargetRect({
-                            top: rect.top - 5,
-                            left: rect.left - 5,
+                            top: rect.top + scrollTop - 5,
+                            left: rect.left + scrollLeft - 5,
                             width: rect.width + 10,
                             height: rect.height + 10
                         });
 
                         // Lógica de posicionamento Padrão
-                        let tooltipTop = rect.bottom + 20;
-                        let tooltipLeft = rect.left + (rect.width / 2) - 160; 
+                        let tooltipTop = rect.bottom + scrollTop + 20;
+                        let tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160; 
                         let arrow = { top: -8, left: '50%', transform: 'translateX(-50%) rotate(45deg)' };
 
                         // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
                         if (step.placement === 'top') {
-                            tooltipTop = rect.top - (isMobile ? 250 : 300); // Ajuste altura no mobile
-                            tooltipLeft = rect.left + (rect.width / 2) - 160;
+                            // CORREÇÃO IA: Aumentei o offset no mobile para subir mais o balão
+                            tooltipTop = rect.top + scrollTop - (isMobile ? 380 : 300); 
+                            tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
                             arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                         } else if (step.placement === 'right' && !isMobile) {
-                            // Só usa 'right' no desktop. No mobile, joga pra baixo pra caber.
-                            tooltipTop = rect.top; 
-                            tooltipLeft = rect.right + 20; 
+                            tooltipTop = rect.top + scrollTop; 
+                            tooltipLeft = rect.right + scrollLeft + 20; 
                             arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' }; 
                         } else if (step.placement === 'bottom') {
-                             tooltipTop = rect.bottom + 20;
-                             tooltipLeft = rect.left + (rect.width / 2) - 160;
+                             tooltipTop = rect.bottom + scrollTop + 20;
+                             tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
                              arrow = { top: -8, left: '50%', transform: 'translateX(-50%) rotate(45deg)' };
                         } else {
                             // --- AUTO CORREÇÃO INTELIGENTE ---
-                            
-                            // Se for alto e na esquerda (Menu) -> No mobile, foca no centro/baixo
                             if (rect.height > window.innerHeight * 0.7 && rect.left < window.innerWidth / 2) {
                                 if (isMobile) {
-                                    tooltipTop = 100; // Fixo no topo relativo
+                                    tooltipTop = scrollTop + 100; // Fixo no topo relativo
                                     tooltipLeft = window.innerWidth / 2 - 160;
-                                    arrow = null; // Sem seta em overlay total
+                                    arrow = null; 
                                 } else {
-                                    tooltipTop = rect.top + 100;
-                                    tooltipLeft = rect.right + 20;
+                                    tooltipTop = rect.top + scrollTop + 100;
+                                    tooltipLeft = rect.right + scrollLeft + 20;
                                     arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' };
                                 }
                             }
-                            // Se estiver muito embaixo da tela -> Joga pra CIMA
-                            else if (tooltipTop + 250 > window.innerHeight) {
-                                tooltipTop = rect.top - 240; // Altura estimada
+                            else if (tooltipTop + 250 > window.innerHeight + scrollTop) {
+                                tooltipTop = rect.top + scrollTop - 240; 
                                 arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                             }
                         }
 
                         // AJUSTES FINAIS DE BORDA (CRÍTICO PARA MOBILE)
-                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85); // Largura real do tooltip
+                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85);
                         
-                        // Garante margem esquerda
                         if (tooltipLeft < 10) { 
                             tooltipLeft = 10;
-                            if (arrow && arrow.left === '50%') arrow.left = (rect.left + rect.width/2) - 10 + 'px'; 
+                            if (arrow && arrow.left === '50%') arrow.left = (rect.left + scrollLeft + rect.width/2) - 10 + 'px'; 
                         }
                         
-                        // Garante margem direita
                         if (tooltipLeft + tooltipWidth > window.innerWidth) {
                             tooltipLeft = window.innerWidth - tooltipWidth - 10;
                             if (arrow && arrow.left === '50%') {
-                                // Recalcula a seta para apontar pro elemento
-                                let arrowOffset = (rect.left + rect.width/2) - tooltipLeft;
-                                // Limita a seta dentro do balão
+                                let arrowOffset = (rect.left + scrollLeft + rect.width/2) - tooltipLeft;
                                 arrowOffset = Math.max(10, Math.min(tooltipWidth - 20, arrowOffset));
                                 arrow.left = arrowOffset + 'px';
-                                arrow.transform = 'translateX(0) rotate(45deg)'; // Remove o translate 50%
+                                arrow.transform = 'translateX(0) rotate(45deg)'; 
                             }
                         }
 
                         setPosition({ top: tooltipTop, left: tooltipLeft });
                         setArrowPos(arrow);
+                        setIsVisible(true); // Mostra o tooltip
                         
+                        // Scroll suave garantindo que o elemento fique no meio (ou fim se for footer)
                         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
                     } else {
-                        // Fallback centralizado
-                        setTargetRect(null);
-                        setPosition({ top: window.innerHeight/2 - 100, left: window.innerWidth/2 - 160 });
-                        setArrowPos(null);
+                        // RETRY SYSTEM: Se não achou (ex: menu animando), tenta de novo em breve
+                        if (retryCount < 5) {
+                            setTimeout(() => findTarget(retryCount + 1), 200);
+                        } else {
+                            // Fallback se falhar tudo
+                            setTargetRect(null);
+                            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                            setPosition({ top: window.innerHeight/2 + scrollTop - 100, left: window.innerWidth/2 - 160 });
+                            setArrowPos(null);
+                            setIsVisible(true);
+                        }
                     }
                 };
 
-                setTimeout(updatePosition, 400); // Delay maior para dar tempo do menu abrir
-                window.addEventListener('resize', updatePosition);
-                return () => window.removeEventListener('resize', updatePosition);
+                setTimeout(() => findTarget(), 300); // Delay inicial para render
+                
+                window.addEventListener('resize', () => findTarget());
+                return () => window.removeEventListener('resize', () => findTarget());
             }, [currentStep, steps]);
 
             const step = steps[currentStep];
             if (!step) return null;
 
             return (
-                <>
-                    {/* Holofote (Só aparece se tiver alvo específico) */}
+                <div style={{ opacity: isVisible ? 1 : 0, transition: 'opacity 0.3s' }}>
+                    {/* Holofote */}
                     {targetRect && (
                         <div 
                             className="tour-spotlight"
@@ -963,7 +976,7 @@
                         className={`tour-tooltip ${theme.card} p-6 rounded-2xl border ${theme.border} shadow-2xl flex flex-col gap-4`}
                         style={{ top: position.top, left: position.left }}
                     >
-                        {targetRect && <div className={`tour-arrow border-l border-t ${theme.border}`} style={arrowPos}></div>}
+                        {targetRect && arrowPos && <div className={`tour-arrow border-l border-t ${theme.border}`} style={arrowPos}></div>}
                         
                         <div className="flex justify-between items-start">
                             <h3 className="font-bold text-xl text-amber-400">{step.title}</h3>
@@ -993,7 +1006,7 @@
                             </div>
                         </div>
                     </div>
-                </>
+                </div>
             );
         };
 
@@ -1200,6 +1213,7 @@
                     title: "Cadastro Mágico com IA ✨",
                     content: "Não perca tempo digitando! Clique aqui, fale ou escreva algo como 'João vai pro Boqueirão as 18h' e nossa IA preenche tudo sozinha.",
                     target: "#btn-magic-create",
+                    view: "dashboard", // GARANTIA: Força a view dashboard para o botão existir
                     placement: 'top'
                 },
                 {
@@ -2657,7 +2671,7 @@
 
             return (
                 <div className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}>
-                    {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
+                    {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} id={`menu-btn-${x.id}`} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
                     
                     {/* MENU DESKTOP COM DRAG AND DROP */}
                     <div id="sidebar-nav" className={`hidden md:flex w-64 flex-col border-r shrink-0 ${theme.border} ${theme.card}`}>
