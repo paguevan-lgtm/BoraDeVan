@@ -41,6 +41,56 @@
         .spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top: 4px solid #f59e0b; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
+        /* --- PREMIUM ANIMATIONS & EASING --- */
+        :root {
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+            --ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 1. Page Transitions */
+        @keyframes pageEnter {
+            from { opacity: 0; transform: translateY(15px) scale(0.98); filter: blur(4px); }
+            to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        .page-transition { animation: pageEnter 0.6s var(--ease-out-expo) forwards; will-change: transform, opacity, filter; }
+
+        /* 2. Staggered Entrance (Cascata) */
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stagger-in { opacity: 0; animation: slideUpFade 0.7s var(--ease-out-expo) forwards; }
+        .d-1 { animation-delay: 50ms; }
+        .d-2 { animation-delay: 100ms; }
+        .d-3 { animation-delay: 150ms; }
+        .d-4 { animation-delay: 200ms; }
+        .d-5 { animation-delay: 250ms; }
+
+        /* 3. Card & Button Interaction */
+        .premium-card {
+            transition: transform 0.4s var(--ease-out-expo), box-shadow 0.4s var(--ease-out-expo), border-color 0.3s;
+        }
+        .premium-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 30px -10px rgba(0,0,0,0.5);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .premium-click:active { transform: scale(0.96); }
+
+        /* 4. Login Intro Animation */
+        .intro-layer {
+            position: fixed; inset: 0; z-index: 9998;
+            background: #d97706; /* Amber-600 */
+            clip-path: circle(0% at 50% 100%);
+            pointer-events: none;
+            transition: clip-path 0.8s var(--ease-in-out-circ);
+        }
+        .intro-layer.active { clip-path: circle(150% at 50% 100%); }
+        
+        .logo-bounce { animation: bounceLogo 1s var(--ease-elastic) infinite; }
+        @keyframes bounceLogo { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
         /* AI Animations */
         .bg-ai { background: linear-gradient(135deg, #f59e0b, #d97706, #b45309); background-size: 200% 200%; animation: ai-pulse 3s ease infinite; }
         @keyframes ai-pulse { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
@@ -58,14 +108,10 @@
         }
 
         /* Drag & Drop Styles */
-        .draggable-item { cursor: grab; touch-action: pan-y; user-select: none; -webkit-touch-callout: none; }
-        .draggable-item:active { cursor: grabbing; z-index: 50; }
+        .draggable-item { cursor: grab; touch-action: pan-y; user-select: none; -webkit-touch-callout: none; transition: transform 0.2s, box-shadow 0.2s; }
+        .draggable-item:active { cursor: grabbing; z-index: 50; transform: scale(1.02); }
         .dragging { opacity: 0.5; border: 2px dashed #f59e0b; }
         .drag-over { border-top: 2px solid #f59e0b; }
-
-        /* Animation Classes */
-        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite; }
-        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 
         input, select, textarea { font-size: 16px !important; }
         .scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -81,11 +127,6 @@
         
         /* Utility classes for printing logic */
         .show-on-print { display: none; } 
-        
-        /* Markdown override */
-        .markdown-body ul { list-style-type: disc; padding-left: 20px; }
-        .markdown-body ol { list-style-type: decimal; padding-left: 20px; }
-        .markdown-body strong { font-weight: bold; color: #fbbf24; }
     </style>
 </head>
 <body>
@@ -645,11 +686,11 @@
             const t = theme || THEMES.default;
             const sz = { sm:'px-3 py-2 text-sm', md:'px-4 py-3.5 text-base' };
             const v = {
-                primary: `${t.primary} shadow-md active:opacity-80`,
-                secondary: `${t.card} ${t.text} active:opacity-80 border ${t.border}`,
-                danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20 active:bg-rose-500/20`,
-                success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 active:bg-emerald-500/20`,
-                ai: `bg-ai text-white shadow-lg active:opacity-80 border-none`
+                primary: `${t.primary} shadow-md premium-click`,
+                secondary: `${t.card} ${t.text} premium-click border ${t.border}`,
+                danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20 active:bg-rose-500/20 premium-click`,
+                success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 active:bg-emerald-500/20 premium-click`,
+                ai: `bg-ai text-white shadow-lg premium-click border-none`
             };
             return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 ${t.radius} font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${v[variant]} ${sz[size]} ${className}`}>{I && <I size={size==='sm'?16:20} />} {children}</button>;
         };
@@ -765,6 +806,7 @@
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [loading, setLoading] = useState(false);
+            const [success, setSuccess] = useState(false);
             const [geoStatus, setGeoStatus] = useState('');
 
             const handleLoginClick = () => {
@@ -774,8 +816,20 @@
                 setGeoStatus('Verificando segurança...');
 
                 const proceedLogin = (coords) => {
-                    onLogin(username, password, coords);
+                    // Em vez de chamar onLogin direto, inicia a animação
+                    setTimeout(() => {
+                        setSuccess(true); // Dispara a animação de sucesso
+                        setTimeout(() => {
+                            onLogin(username, password, coords);
+                        }, 800); // Espera a animação de expansão acontecer
+                    }, 500); // Delay simulado para "processamento"
                 };
+
+                // Validação Local antes de tudo
+                if (!USERS_DB[username] || USERS_DB[username].pass !== password) {
+                    setLoading(false);
+                    return alert('Usuário ou senha incorretos.');
+                }
 
                 if (!navigator.geolocation) {
                     proceedLogin({ error: 'Não suportado' });
@@ -788,7 +842,7 @@
                         proceedLogin({ latitude, longitude, accuracy });
                     },
                     (err) => {
-                        console.warn("Geolocalização bloqueada pelo navegador. Prosseguindo sem local.");
+                        console.warn("Geolocalização bloqueada. Prosseguindo.");
                         proceedLogin({ error: 'Permissão negada/Bloqueado' });
                     },
                     { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
@@ -796,44 +850,49 @@
             };
 
             return (
-                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center login-bg p-6 text-white">
-                    <div className="mb-8 flex flex-col items-center">
-                        <div className="w-20 h-20 bg-amber-600 rounded-2xl flex items-center justify-center mb-4 shadow-xl">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><line x1="16" y1="8" x2="20" y2="8"/><path d="M16 8h4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                        </div>
-                        <h1 className="text-3xl font-bold">Bora de Van</h1>
-                        <p className="opacity-60 text-sm">Gestão de Transporte</p>
-                    </div>
-                    <div className="w-full max-w-sm space-y-4 bg-white/5 p-6 rounded-2xl border border-white/10 backdrop-blur-sm">
-                        <Input 
-                            theme={{text: 'text-white', radius: 'rounded-xl'}} 
-                            label="Usuário" 
-                            value={username} 
-                            onChange={e => setUsername(e.target.value)} 
-                        />
-                        <Input 
-                            theme={{text: 'text-white', radius: 'rounded-xl'}} 
-                            label="Senha" 
-                            type="password" 
-                            value={password} 
-                            onChange={e => setPassword(e.target.value)} 
-                        />
-                        
-                        {geoStatus && <p className="text-xs text-center text-amber-400 animate-pulse">{geoStatus}</p>}
+                <>
+                    {/* Layer de Introdução Animada */}
+                    <div className={`intro-layer ${success ? 'active' : ''}`}></div>
 
-                        <button 
-                            onClick={handleLoginClick}
-                            disabled={loading}
-                            className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
-                        >
-                            {loading ? (
-                                <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"/> Verificando...</>
-                            ) : (
-                                <><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Entrar</>
-                            )}
-                        </button>
+                    <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center login-bg p-6 text-white transition-opacity duration-500 ${success ? 'opacity-0' : 'opacity-100'}`}>
+                        <div className="mb-8 flex flex-col items-center">
+                            <div className="w-24 h-24 bg-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-2xl logo-bounce">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" rx="2" ry="2"/><line x1="16" y1="8" x2="20" y2="8"/><path d="M16 8h4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-6"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                            </div>
+                            <h1 className="text-4xl font-bold mb-2 tracking-tight">Bora de Van</h1>
+                            <p className="opacity-60 text-sm font-medium tracking-wide">GESTÃO DE TRANSPORTE PREMIUM</p>
+                        </div>
+                        <div className="w-full max-w-sm space-y-5 bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl stagger-in d-1">
+                            <Input 
+                                theme={{text: 'text-white', radius: 'rounded-2xl'}} 
+                                label="Usuário" 
+                                value={username} 
+                                onChange={e => setUsername(e.target.value)} 
+                            />
+                            <Input 
+                                theme={{text: 'text-white', radius: 'rounded-2xl'}} 
+                                label="Senha" 
+                                type="password" 
+                                value={password} 
+                                onChange={e => setPassword(e.target.value)} 
+                            />
+                            
+                            {geoStatus && <p className="text-xs text-center text-amber-400 animate-pulse">{geoStatus}</p>}
+
+                            <button 
+                                onClick={handleLoginClick}
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-orange-500/20 transition-all flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                {loading ? (
+                                    <><div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"/> Acessando...</>
+                                ) : (
+                                    <>Entrar <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></>
+                                )}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                </>
             );
         };
 
@@ -1339,7 +1398,8 @@
                     setPaxDeleteSessionCount(0);
                     await logAccess(u, 'Login Manual', coords);
                 } else {
-                    alert('Usuário ou senha incorretos.');
+                    // Fail safe se o mock do LoginScreen passar (não deve ocorrer com a lógica nova)
+                    alert('Erro de autenticação.');
                 }
             };
 
@@ -1867,6 +1927,50 @@
                 const msg = encodeURIComponent(generateWhatsappMessage(trip.id, p, d.name, trip.time, trip.date));
                 window.open(`https://wa.me/55${d.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
             };
+
+            // FUNÇÃO PARA GERAR RESUMO DO MÊS (HISTÓRICO)
+            const generateMonthSummary = () => {
+                const targetMonth = historyDate.getMonth();
+                const targetYear = historyDate.getFullYear();
+                
+                // Filtra todas as viagens do mês selecionado
+                const monthTrips = data.trips.filter(t => {
+                    if(!t.date) return false;
+                    const [y, m, d] = t.date.split('-').map(Number);
+                    return (m - 1) === targetMonth && y === targetYear;
+                });
+
+                const totalTrips = monthTrips.length;
+                const cancelledTrips = monthTrips.filter(t => t.status === 'Cancelada').length;
+                
+                // Conta passageiros apenas de viagens VÁLIDAS (não canceladas)
+                const validTrips = monthTrips.filter(t => t.status !== 'Cancelada');
+                const totalPax = validTrips.reduce((acc, t) => {
+                    // Pega os passageiros dessa viagem e soma suas quantidades (passengerCount)
+                    const pCount = data.passengers.filter(p => (t.passengerIds || []).includes(p.id))
+                                                  .reduce((a, b) => a + parseInt(b.passengerCount || 1), 0);
+                    return acc + pCount;
+                }, 0);
+
+                const monthName = historyDate.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+                
+                const summary = `📊 RESUMO DE ${monthName.toUpperCase()}\n\n` +
+                                `🚐 Total de Viagens: ${totalTrips}\n` +
+                                `👥 Total de Passageiros: ${totalPax}\n` +
+                                `🚫 Canceladas: ${cancelledTrips}`;
+                
+                // Gera o arquivo .txt para download
+                const blob = new Blob([summary], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Resumo_${monthName.replace(/ /g, '_')}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            };
+
             // Ao atualizar status manualmente (Finalizar/Cancelar), também tornamos permanente (isTemp: false)
             // Se for CANCELAR uma temporária, deleta de vez.
             const updateTripStatus = (id, status) => { 
@@ -1898,8 +2002,25 @@
                 return list;
             }, [data, view, filterStatus, searchTerm]);
 
-            const activeTrips = useMemo(() => data.trips.filter(t => t.status === 'Em andamento' || t.status === 'Ativo').sort((a,b) => parseInt(b.id) - parseInt(a.id)), [data.trips]);
-            const historyTrips = useMemo(() => data.trips.filter(t => t.status !== 'Em andamento' && t.status !== 'Ativo').sort((a,b) => parseInt(b.id) - parseInt(a.id)), [data.trips]);
+            // CORREÇÃO: Aplicando filtro de busca (searchTerm) nas listas de viagens
+            const activeTrips = useMemo(() => {
+                let list = data.trips.filter(t => t.status === 'Em andamento' || t.status === 'Ativo');
+                if (searchTerm && view === 'trips') {
+                    const lower = searchTerm.toLowerCase().trim();
+                    list = list.filter(t => String(t.id).includes(lower) || (t.driverName && t.driverName.toLowerCase().includes(lower)));
+                }
+                return list.sort((a,b) => parseInt(b.id) - parseInt(a.id));
+            }, [data.trips, searchTerm, view]);
+
+            const historyTrips = useMemo(() => {
+                let list = data.trips.filter(t => t.status !== 'Em andamento' && t.status !== 'Ativo');
+                if (searchTerm && view === 'trips') {
+                    const lower = searchTerm.toLowerCase().trim();
+                    list = list.filter(t => String(t.id).includes(lower) || (t.driverName && t.driverName.toLowerCase().includes(lower)));
+                }
+                return list.sort((a,b) => parseInt(b.id) - parseInt(a.id));
+            }, [data.trips, searchTerm, view]);
+
             const tripsForSelectedDate = useMemo(() => data.trips.filter(t => t.date === selectedDate).sort((a,b) => (a.time||'').localeCompare(b.time||'')), [data.trips, selectedDate]); 
             const { pendingPax, assignedPax } = useMemo(() => {
                 const paxOfDay = data.passengers.filter(p => p.date === selectedDate);
@@ -1921,6 +2042,9 @@
                 const targetYear = historyDate.getFullYear();
                 
                 const filtered = historyTrips.filter(t => {
+                    // AJUSTE: Se tiver termo de busca, ignora filtro de data para achar a viagem em qualquer mês
+                    if (searchTerm && view === 'trips') return true;
+
                     if(!t.date) return false;
                     const [y, m, d] = t.date.split('-').map(Number);
                     return (m - 1) === targetMonth && y === targetYear;
@@ -1938,7 +2062,49 @@
                     date,
                     trips: groups[date].sort((a, b) => (b.time || '').localeCompare(a.time || ''))
                 }));
-            }, [historyTrips, historyDate]);
+            }, [historyTrips, historyDate, searchTerm, view]);
+
+            // LOGICA DA ABA COBRANÇA (MOVED UP FOR REACT HOOK COMPLIANCE)
+            const billingData = useMemo(() => {
+                if (view !== 'billing') return { groups: [], summary: { pending: 0, paid: 0, total: 0 } };
+
+                // Filtra viagens válidas (não canceladas)
+                const validTrips = data.trips.filter(t => t.status !== 'Cancelada');
+
+                // Agrupamento
+                const groups = {};
+                let totalPending = 0;
+                let totalPaid = 0;
+
+                validTrips.forEach(t => {
+                    // Calcula Passageiros
+                    const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                    const value = pCount * 4; // Regra: Pax * 4
+                    const isPaid = t.paymentStatus === 'Pago';
+                    
+                    if (isPaid) totalPaid += value;
+                    else totalPending += value;
+
+                    const dateKey = t.date; // YYYY-MM-DD
+                    if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 };
+                    
+                    groups[dateKey].trips.push({ ...t, pCount, value, isPaid });
+                    groups[dateKey].totalValue += value;
+                });
+
+                // Transforma em array e ordena por data (mais recente primeiro)
+                const sortedGroups = Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+                
+                // Ordena viagens dentro dos grupos por horário
+                sortedGroups.forEach(g => {
+                    g.trips.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+                });
+
+                return { 
+                    groups: sortedGroups, 
+                    summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } 
+                };
+            }, [data.trips, data.passengers, view]);
 
             const toggleHistoryDay = (date) => {
                 setExpandedDays(prev => ({...prev, [date]: !prev[date]}));
@@ -1946,7 +2112,6 @@
 
             const prevHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() - 1, 1));
             const nextHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() + 1, 1));
-
 
             // Calendar
             const getDaysInMonth = (date) => {
@@ -1972,7 +2137,9 @@
             // Menu Items
             const menuItems = [
                 {id:'dashboard',l:'Dashboard',i:Icons.Home}, {id:'appointments', l:'Agendamentos', i:Icons.Calendar}, {id:'passengers',l:'Passageiros',i:Icons.Users}, 
-                {id:'table', l: 'Tabela SP', i: Icons.List}, {id:'drivers',l:'Motoristas',i:Icons.Van}, {id:'trips',l:'Viagens',i:Icons.Map}, {id:'lostFound', l:'Perdidos e Achados', i:Icons.Box}
+                {id:'table', l: 'Tabela SP', i: Icons.List}, {id:'drivers',l:'Motoristas',i:Icons.Van}, {id:'trips',l:'Viagens',i:Icons.Map}, 
+                {id:'billing', l:'Cobrança', i:Icons.Dollar}, // NOVA ABA AQUI
+                {id:'lostFound', l:'Perdidos e Achados', i:Icons.Box}
             ];
 
             const renderContextMenu = () => {
@@ -2019,6 +2186,36 @@
             
             let lousaEffectiveIndex = 0;
 
+            const togglePaymentStatus = (trip) => {
+                const newStatus = trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago';
+                dbOp('update', 'trips', { id: trip.id, paymentStatus: newStatus });
+            };
+
+            const sendBillingMessage = (trip) => {
+                const dr = data.drivers.find(d => d.id === trip.driverId);
+                if (!dr || !dr.phone) return alert("Motorista sem telefone.");
+                
+                // Emojis em Unicode para máxima compatibilidade
+                // PAGO = ✅ (\u2705)
+                // PENDENTE = ⚠️ (\u26A0\uFE0F)
+                const statusStr = trip.paymentStatus === 'Pago' ? 'PAGO \u2705' : 'PENDENTE \u26A0\uFE0F';
+                
+                // Data atual para o cabeçalho "Debito em aberto"
+                const today = new Date().toLocaleDateString('pt-BR');
+
+                // Montagem da mensagem no formato exato solicitado
+                const msg = `*Debito em aberto* - ${today}\n\n` +
+                            `*RELATÓRIO DE VIAGEM - ${formatDisplayDate(trip.date)}*\n\n` +
+                            `• *ID:* #${trip.id}\n` +
+                            `• *Viagem:* ${trip.time}\n` +
+                            `• *Passageiros:* ${trip.pCount}\n` +
+                            `• *Valor Total:* *R$ ${trip.value},00*\n` +
+                            `• *Status:* *${statusStr}*\n\n` +
+                            `_Controle Financeiro Bora de Van_`;
+                
+                window.open(`https://wa.me/55${dr.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
+            };
+
             return (
                 <div className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}>
                     {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{menuItems.map(x=>(<button key={x.id} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
@@ -2026,13 +2223,14 @@
 
                     <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                         <header className={`h-16 backdrop-blur-md border-b flex items-center justify-between px-4 shrink-0 z-20 ${theme.border}`}>
-                            <div className="flex items-center gap-3"><button onClick={()=>setMenuOpen(true)} className="md:hidden p-2 opacity-70"><Icons.Menu/></button><h2 className="text-lg font-bold capitalize">{view === 'appointments' ? 'Agendamentos' : view === 'lostFound' ? 'Perdidos e Achados' : view === 'table' ? 'Tabela SP' : view}</h2></div>
-                            {view !== 'dashboard' && view !== 'settings' && (<div className="flex gap-2">{view!=='trips'&&view!=='appointments'&&view!=='lostFound'&&view!=='table'&&<button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}<button onClick={()=>{setFormData(view==='passengers'?{neighborhood:BAIRROS[0],status: formData.status || 'Ativo', payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()}: view==='appointments' ? {date: getTodayDate(), driverId: ''} : view==='lostFound' ? {date: getTodayDate(), status: 'Pendente'} : view==='drivers' ? {status: 'Ativo'} : {}); if(view==='trips' || view==='appointments'){setSuggestedTrip(null); setEditingTripId(null);} setModal(view==='passengers'?'passenger':view==='drivers'?'driver':view==='lostFound'?'lostFound':'trip');}} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button></div>)}
+                            <div className="flex items-center gap-3"><button onClick={()=>setMenuOpen(true)} className="md:hidden p-2 opacity-70"><Icons.Menu/></button><h2 className="text-lg font-bold capitalize">{view === 'appointments' ? 'Agendamentos' : view === 'lostFound' ? 'Perdidos e Achados' : view === 'table' ? 'Tabela SP' : view === 'billing' ? 'Financeiro / Cobrança' : view}</h2></div>
+                            {view !== 'dashboard' && view !== 'settings' && view !== 'billing' && (<div className="flex gap-2">{view!=='trips'&&view!=='appointments'&&view!=='lostFound'&&view!=='table'&&<button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}<button onClick={()=>{setFormData(view==='passengers'?{neighborhood:BAIRROS[0],status: formData.status || 'Ativo', payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()}: view==='appointments' ? {date: getTodayDate(), driverId: ''} : view==='lostFound' ? {date: getTodayDate(), status: 'Pendente'} : view==='drivers' ? {status: 'Ativo'} : {}); if(view==='trips' || view==='appointments'){setSuggestedTrip(null); setEditingTripId(null);} setModal(view==='passengers'?'passenger':view==='drivers'?'driver':view==='lostFound'?'lostFound':'trip');}} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button></div>)}
                         </header>
 
-                        <div className="flex-1 scroll-y p-4 space-y-6 pb-24 md:pb-8">
+                        {/* --- MAIN CONTENT AREA WITH ANIMATIONS --- */}
+                        <div key={view} className="flex-1 scroll-y p-4 space-y-6 pb-24 md:pb-8 page-transition">
                             
-                            {/* --- TABELA SP OMITTED FOR BREVITY AS NO CHANGES REQUESTED THERE --- */}
+                            {/* --- TABELA SP --- */}
                             {view === 'table' && (
                                 <div 
                                     className="space-y-6 max-w-4xl mx-auto w-full min-h-[70vh]"
@@ -2047,8 +2245,7 @@
                                         <button onClick={()=>setTableTab('madrugada')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='madrugada' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Madrugada</button>
                                         <button onClick={()=>setTableTab('mensagens')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='mensagens' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Mensagens</button>
                                     </div>
-                                    {/* ... Previous table content remains mostly same, just hiding for brevity in this response but keeping functionality ... */}
-                                    {/* (Assume table logic is preserved) */}
+                                    
                                     {tableTab === 'geral' && (
                                         <div className={`${theme.card} p-5 rounded-xl border ${theme.border} anim-fade`}>
                                             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -2175,7 +2372,7 @@
 
                             {(view === 'passengers' || view === 'drivers' || view === 'trips' || view === 'lostFound') && (
                                 <div className="mb-4">
-                                    <div className="relative">
+                                    <div className="relative stagger-in d-1">
                                         <div className="absolute left-3 top-3 opacity-50"><Icons.Search size={20}/></div>
                                         <input 
                                             className={`w-full bg-black/10 border border-white/10 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-current transition-colors ${theme.text}`} 
@@ -2189,9 +2386,9 @@
 
                             {view === 'settings' && (
                                 <div className="space-y-6">
-                                    <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex items-center gap-4`}> <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> </div> <div> <h3 className="text-xl font-bold">{user.username}</h3> <p className="opacity-60 text-sm capitalize">{user.role}</p> <button onClick={handleLogout} className="mt-2 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-1"><Icons.LogOut size={12}/> Sair da Conta</button> </div> </div>
+                                    <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex items-center gap-4 stagger-in d-1 premium-card`}> <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> </div> <div> <h3 className="text-xl font-bold">{user.username}</h3> <p className="opacity-60 text-sm capitalize">{user.role}</p> <button onClick={handleLogout} className="mt-2 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-1"><Icons.LogOut size={12}/> Sair da Conta</button> </div> </div>
                                     
-                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}>
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card`}>
                                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Icons.Stars/> Configuração IA (Gemini)</h3>
                                         <div className="flex gap-2">
                                             <input 
@@ -2207,7 +2404,7 @@
                                     </div>
 
                                     {user.username === 'Breno' && (
-                                        <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}>
+                                        <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-3 premium-card`}>
                                             <h3 className="font-bold text-lg mb-4 text-red-400 flex items-center gap-2"><Icons.Shield/> Segurança e Bloqueios</h3>
                                             <div className="flex flex-col md:flex-row gap-2 mb-4"><input className="bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm flex-1" placeholder="IP para bloquear" value={ipToBlock} onChange={e=>setIpToBlock(e.target.value)} /><button onClick={blockIp} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Bloquear</button></div>
                                             <div className="space-y-2 max-h-40 overflow-y-auto mb-6">{data.blocked_ips && data.blocked_ips.map(item => (<div key={item.id} className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex justify-between items-center"><div><div className="text-sm font-bold font-mono">{item.ip}</div></div><button onClick={()=>del('blocked_ips', item.id)} className="text-red-400 hover:text-red-300 p-2"><Icons.Trash size={16}/></button></div>))}</div>
@@ -2215,29 +2412,35 @@
                                             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">{ipHistory.map((log) => { const safeIp = (log.ip||'').replace(/\./g, '_'); const currentLabel = ipLabels[safeIp] || ''; return (<div key={log.id} className="bg-white/5 p-2 rounded-lg text-xs flex flex-col gap-1 border border-white/5"><div className="flex justify-between opacity-60"><span>{new Date(log.timestamp).toLocaleString()}</span><span>{log.username}</span></div><div className="flex items-center gap-2"><span className="font-mono bg-black/30 px-1.5 rounded">{log.ip}</span><input className="bg-transparent border-b border-white/10 focus:border-white/50 outline-none flex-1 text-yellow-400" placeholder="Nota..." defaultValue={currentLabel} onBlur={(e) => saveIpLabel(log.ip, e.target.value)} /></div></div>); })}</div>
                                         </div>
                                     )}
-                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold text-lg mb-4">🎨 Temas</h3><div className="grid grid-cols-2 gap-3">{Object.keys(THEMES).map(k=>(<button key={k} onClick={()=>changeTheme(k)} className={`p-4 ${theme.radius} border flex items-center gap-2 ${themeKey===k ? theme.primary : 'border-transparent bg-black/10'}`}>{THEMES[k].name}</button>))}</div></div>
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-4 premium-card`}><h3 className="font-bold text-lg mb-4">🎨 Temas</h3><div className="grid grid-cols-2 gap-3">{Object.keys(THEMES).map(k=>(<button key={k} onClick={()=>changeTheme(k)} className={`p-4 ${theme.radius} border flex items-center gap-2 ${themeKey===k ? theme.primary : 'border-transparent bg-black/10'}`}>{THEMES[k].name}</button>))}</div></div>
                                 </div>
                             )}
 
                             {view === 'dashboard' && (
                                 <div className="space-y-6">
-                                    <div className="grid grid-cols-2 gap-4"><div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><div className={`mb-2 ${theme.accent}`}><Icons.Users size={24}/></div><div className="text-2xl font-bold">{data.passengers.length}</div><div className="text-xs opacity-70">Passageiros</div></div><div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><div className={`mb-2 ${theme.accent}`}><Icons.Map size={24}/></div><div className="text-2xl font-bold">{data.trips.length}</div><div className="text-xs opacity-70">Viagens</div></div></div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} flex flex-col items-center relative`}><h3 className="font-bold mb-6 w-full flex justify-between items-center">💰 Métodos</h3>{stats.p.length ? <DonutChart data={stats.p} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div><div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-6 w-full">📍 Bairros</h3>{stats.b.length ? <HorizontalBarChart data={stats.b} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div></div>
-                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" placeholder="Adicionar lembrete..." value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyPress={e=> e.key === 'Enter' && saveNote()} /><button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button></div><div className="space-y-2 max-h-40 overflow-y-auto pr-1">{data.notes.map(note => (<div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group"><span>{note.text}</span><button onClick={()=>del('notes', note.id)} className="opacity-50 hover:opacity-100 text-red-400"><Icons.Trash size={14}/></button></div>))}</div></div>
-                                    <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border}`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-1 premium-card`}><div className={`mb-2 ${theme.accent}`}><Icons.Users size={24}/></div><div className="text-2xl font-bold">{data.passengers.length}</div><div className="text-xs opacity-70">Passageiros</div></div>
+                                        <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card`}><div className={`mb-2 ${theme.accent}`}><Icons.Map size={24}/></div><div className="text-2xl font-bold">{data.trips.length}</div><div className="text-xs opacity-70">Viagens</div></div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} flex flex-col items-center relative stagger-in d-3 premium-card`}><h3 className="font-bold mb-6 w-full flex justify-between items-center">💰 Métodos</h3>{stats.p.length ? <DonutChart data={stats.p} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div>
+                                        <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-4 premium-card`}><h3 className="font-bold mb-6 w-full">📍 Bairros</h3>{stats.b.length ? <HorizontalBarChart data={stats.b} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div>
+                                    </div>
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" placeholder="Adicionar lembrete..." value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyPress={e=> e.key === 'Enter' && saveNote()} /><button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button></div><div className="space-y-2 max-h-40 overflow-y-auto pr-1">{data.notes.map(note => (<div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group"><span>{note.text}</span><button onClick={()=>del('notes', note.id)} className="opacity-50 hover:opacity-100 text-red-400"><Icons.Trash size={14}/></button></div>))}</div></div>
+                                    <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
                                 </div>
                             )}
 
                             {view === 'lostFound' && (
                                 <div className="space-y-4">
-                                    {filteredList.map(item => ( <div key={item.id} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${item.status === 'Entregue' ? 'bg-green-500' : 'bg-yellow-500'}`}></div><div className="pl-3"><div className="flex justify-between items-start"><h3 className="font-bold text-lg">{item.description}</h3><span className={`text-xs px-2 py-0.5 rounded-full border ${item.status === 'Entregue' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>{item.status}</span></div><p className="text-sm opacity-70 mt-1">📍 {item.location} • 📅 {formatDisplayDate(item.date)}</p></div><div className="pl-3 flex justify-end gap-2 mt-3 pt-2 border-t border-white/10"><button onClick={() => { const newStatus = item.status === 'Pendente' ? 'Entregue' : 'Pendente'; dbOp('update', 'lostFound', { id: item.id, status: newStatus }); }} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">{item.status === 'Pendente' ? 'Marcar Entregue' : 'Marcar Pendente'}</button><IconButton theme={theme} variant="danger" onClick={()=>del('lostFound', item.id)} icon={Icons.Trash}/></div></div> ))}
+                                    {filteredList.map((item, i) => ( <div key={item.id} style={{animationDelay: `${i * 50}ms`}} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden stagger-in premium-card`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${item.status === 'Entregue' ? 'bg-green-500' : 'bg-yellow-500'}`}></div><div className="pl-3"><div className="flex justify-between items-start"><h3 className="font-bold text-lg">{item.description}</h3><span className={`text-xs px-2 py-0.5 rounded-full border ${item.status === 'Entregue' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'}`}>{item.status}</span></div><p className="text-sm opacity-70 mt-1">📍 {item.location} • 📅 {formatDisplayDate(item.date)}</p></div><div className="pl-3 flex justify-end gap-2 mt-3 pt-2 border-t border-white/10"><button onClick={() => { const newStatus = item.status === 'Pendente' ? 'Entregue' : 'Pendente'; dbOp('update', 'lostFound', { id: item.id, status: newStatus }); }} className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">{item.status === 'Pendente' ? 'Marcar Entregue' : 'Marcar Pendente'}</button><IconButton theme={theme} variant="danger" onClick={()=>del('lostFound', item.id)} icon={Icons.Trash}/></div></div> ))}
                                 </div>
                             )}
 
                             {view === 'appointments' && (
                                 <div className="space-y-6">
-                                    <div className={`${theme.card} ${theme.radius} border ${theme.border} p-4`}><div className="flex items-center justify-between mb-4"><h3 className="font-bold text-lg capitalize">{monthName}</h3><div className="flex gap-2"><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()-1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronLeft size={20}/></button><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()+1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronRight size={20}/></button></div></div><div className="grid grid-cols-7 gap-1 text-center mb-2 text-xs opacity-60">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}</div><div className="grid grid-cols-7 gap-1">{dayElements}</div><div className="mt-4 pt-3 border-t border-white/10 flex gap-2"><button onClick={copyDaySummary} className="w-full bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"><Icons.Copy size={16}/> 📋 Copiar Resumo do Dia</button></div></div>
-                                    <div className="space-y-4">
+                                    <div className={`${theme.card} ${theme.radius} border ${theme.border} p-4 stagger-in d-1`}><div className="flex items-center justify-between mb-4"><h3 className="font-bold text-lg capitalize">{monthName}</h3><div className="flex gap-2"><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()-1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronLeft size={20}/></button><button onClick={()=>setCalendarDate(new Date(calendarDate.setMonth(calendarDate.getMonth()+1)))} className="p-2 hover:bg-white/10 rounded-lg"><Icons.ChevronRight size={20}/></button></div></div><div className="grid grid-cols-7 gap-1 text-center mb-2 text-xs opacity-60">{['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i}>{d}</div>)}</div><div className="grid grid-cols-7 gap-1">{dayElements}</div><div className="mt-4 pt-3 border-t border-white/10 flex gap-2"><button onClick={copyDaySummary} className="w-full bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"><Icons.Copy size={16}/> 📋 Copiar Resumo do Dia</button></div></div>
+                                    <div className="space-y-4 stagger-in d-2">
                                         <h3 className="font-bold text-lg border-b border-white/10 pb-2">📅 {formatDisplayDate(selectedDate)}</h3>
                                         
                                         <div className="space-y-3">
@@ -2263,7 +2466,7 @@
                                                         </div>
                                                         <div className="space-y-3 pl-2 border-l border-white/5">
                                                             {grouped[time].map(p => (
-                                                                <div key={p.id} className={`${theme.card} ${theme.radius} border border-yellow-500/30 p-4 relative bg-yellow-500/5`}>
+                                                                <div key={p.id} className={`${theme.card} ${theme.radius} border border-yellow-500/30 p-4 relative bg-yellow-500/5 premium-card`}>
                                                                     <div className="flex justify-between items-start mb-2">
                                                                         <div>
                                                                             <div className="font-bold text-lg">{p.name}</div>
@@ -2295,21 +2498,21 @@
                                         </div>
 
                                         <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-blue-400">Em Viagem</h4>{assignedPax.length > 0 ? (assignedPax.map(p => (<div key={p.id} className={`${theme.card} ${theme.radius} border border-white/5 p-3 relative opacity-60 hover:opacity-100 transition-opacity`}><div className="flex justify-between items-center"><div><div className="font-bold">{p.name}</div><div className="text-xs opacity-70">{p.neighborhood} • {p.time}</div></div><div className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Em Viagem</div></div></div>))) : (<p className="text-sm opacity-40 italic pl-1">Nenhum.</p>)}</div>
-                                        <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1">Viagens do Dia</h4>{tripsForSelectedDate.length > 0 ? (tripsForSelectedDate.map(t => { const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0); let statusColor = 'bg-blue-500'; if(t.status === 'Finalizada') statusColor = 'bg-green-500'; if(t.status === 'Cancelada') statusColor = 'bg-red-500'; return (<div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-4 flex justify-between items-center relative overflow-hidden`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColor}`}></div><div><div className="font-bold flex items-center gap-2">{t.driverName}<span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${statusColor.replace('bg-', 'border-').replace('500', '500/50')} ${statusColor.replace('bg-', 'text-').replace('500', '400')} bg-transparent`}>{t.status}</span></div><div className="text-xs opacity-70 flex gap-2 mt-1"><span>🕒 {calculateTimeSlot(t.time)}</span><span>👥 {pCount} pax</span></div></div><IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" /></div>); })) : (<p className="text-sm opacity-40 italic pl-1">Nenhuma viagem.</p>)}</div>
+                                        <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1">Viagens do Dia</h4>{tripsForSelectedDate.length > 0 ? (tripsForSelectedDate.map(t => { const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0); let statusColor = 'bg-blue-500'; if(t.status === 'Finalizada') statusColor = 'bg-green-500'; if(t.status === 'Cancelada') statusColor = 'bg-red-500'; return (<div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-4 flex justify-between items-center relative overflow-hidden premium-card`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColor}`}></div><div><div className="font-bold flex items-center gap-2">{t.driverName}<span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${statusColor.replace('bg-', 'border-').replace('500', '500/50')} ${statusColor.replace('bg-', 'text-').replace('500', '400')} bg-transparent`}>{t.status}</span></div><div className="text-xs opacity-70 flex gap-2 mt-1"><span>🕒 {calculateTimeSlot(t.time)}</span><span>👥 {pCount} pax</span></div></div><IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" /></div>); })) : (<p className="text-sm opacity-40 italic pl-1">Nenhuma viagem.</p>)}</div>
                                     </div>
                                 </div>
                             )}
 
                             {view === 'passengers' && (
                                 <div className="space-y-3">
-                                    {filteredList.map(item => (<div key={item.id} onClick={() => setExpandedPax(expandedPax === item.id ? null : item.id)} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform`}><div className="absolute top-1 right-8 text-4xl font-bold opacity-[0.07] pointer-events-none">#{item.id}</div><div className="absolute top-3 right-3 text-xs opacity-50">{expandedPax === item.id ? <Icons.ChevronUp size={18}/> : <Icons.ChevronDown size={18}/>}</div><div className="pr-8"><div className="flex flex-wrap gap-2 mb-1">{item.tags && item.tags.split(',').map((tag, i) => (<span key={i} className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase">{tag.trim()}</span>))}</div><h3 className="font-bold text-lg">{item.name}</h3><p className="text-sm opacity-70">{item.neighborhood}</p></div>{expandedPax === item.id && (<div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm expand-content anim-fade"><div className="grid grid-cols-2 gap-4"><div><span className="block opacity-50 text-xs">TELEFONE</span>{item.phone}</div><div><span className="block opacity-50 text-xs">PAGAMENTO</span>{item.payment}</div><div className="col-span-2"><span className="block opacity-50 text-xs">ENDEREÇO</span>{item.address} {item.reference ? `(${item.reference})` : ''}</div><div><span className="block opacity-50 text-xs">DATA/HORA</span>{formatDisplayDate(item.date)} - {item.time}</div><div><span className="block opacity-50 text-xs">DETALHES</span>{item.passengerCount} pax | {item.luggageCount || 0} malas</div><div><span className="block opacity-50 text-xs">STATUS</span><span className={item.status === 'Ativo' ? 'text-green-400' : 'text-red-400'}>{item.status}</span></div></div><div className="flex gap-2 pt-4 mt-2"><Button theme={theme} onClick={(e)=>{e.stopPropagation(); setFormData(item); setModal('passenger')}} variant="secondary" className="flex-1 py-2 text-sm" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="default" onClick={(e)=>{e.stopPropagation(); copyPassengerData(item)}} icon={Icons.Copy}/>{item.phone && <IconButton theme={theme} variant="success" onClick={(e)=>{e.stopPropagation(); callPhone(item.phone)}} icon={Icons.Phone}/>}<IconButton theme={theme} variant="danger" onClick={(e)=>{e.stopPropagation(); del(view, item.id)}} icon={Icons.Trash}/></div></div>)}</div>))}
+                                    {filteredList.map((item, i) => (<div key={item.id} style={{animationDelay: `${i * 50}ms`}} onClick={() => setExpandedPax(expandedPax === item.id ? null : item.id)} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform stagger-in premium-card`}><div className="absolute top-1 right-8 text-4xl font-bold opacity-[0.07] pointer-events-none">#{item.id}</div><div className="absolute top-3 right-3 text-xs opacity-50">{expandedPax === item.id ? <Icons.ChevronUp size={18}/> : <Icons.ChevronDown size={18}/>}</div><div className="pr-8"><div className="flex flex-wrap gap-2 mb-1">{item.tags && item.tags.split(',').map((tag, i) => (<span key={i} className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase">{tag.trim()}</span>))}</div><h3 className="font-bold text-lg">{item.name}</h3><p className="text-sm opacity-70">{item.neighborhood}</p></div>{expandedPax === item.id && (<div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm expand-content anim-fade"><div className="grid grid-cols-2 gap-4"><div><span className="block opacity-50 text-xs">TELEFONE</span>{item.phone}</div><div><span className="block opacity-50 text-xs">PAGAMENTO</span>{item.payment}</div><div className="col-span-2"><span className="block opacity-50 text-xs">ENDEREÇO</span>{item.address} {item.reference ? `(${item.reference})` : ''}</div><div><span className="block opacity-50 text-xs">DATA/HORA</span>{formatDisplayDate(item.date)} - {item.time}</div><div><span className="block opacity-50 text-xs">DETALHES</span>{item.passengerCount} pax | {item.luggageCount || 0} malas</div><div><span className="block opacity-50 text-xs">STATUS</span><span className={item.status === 'Ativo' ? 'text-green-400' : 'text-red-400'}>{item.status}</span></div></div><div className="flex gap-2 pt-4 mt-2"><Button theme={theme} onClick={(e)=>{e.stopPropagation(); setFormData(item); setModal('passenger')}} variant="secondary" className="flex-1 py-2 text-sm" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="default" onClick={(e)=>{e.stopPropagation(); copyPassengerData(item)}} icon={Icons.Copy}/>{item.phone && <IconButton theme={theme} variant="success" onClick={(e)=>{e.stopPropagation(); callPhone(item.phone)}} icon={Icons.Phone}/>}<IconButton theme={theme} variant="danger" onClick={(e)=>{e.stopPropagation(); del(view, item.id)}} icon={Icons.Trash}/></div></div>)}</div>))}
                                     {!filteredList.length && <div className="text-center opacity-50 py-10">Nenhum passageiro.</div>}
                                 </div>
                             )}
 
                             {(view === 'drivers') && (
                                 <div className="space-y-3">
-                                    {filteredList.map(item => (<div key={item.id} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden flex flex-col gap-4 group`}><div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase tracking-wider ${item.status === 'Ativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{item.status}</div><div className="flex items-center gap-4"><div className={`w-16 h-16 rounded-full p-1 border-2 ${item.status === 'Ativo' ? 'border-green-500/50' : 'border-red-500/50'} flex-shrink-0`}><img src={getAvatarUrl(item.name)} alt="Avatar" className="w-full h-full rounded-full bg-slate-700/50"/></div><div className="flex-1 min-w-0"><h3 className="font-bold text-lg truncate">{item.name}</h3><div className="flex items-center gap-2 text-sm opacity-60"><span className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">{item.plate || 'SEM PLACA'}</span><span>•</span><span className="flex items-center gap-1"><Icons.Users size={12}/> {item.capacity} lug</span></div></div></div><div className="grid grid-cols-2 gap-3 bg-black/20 p-3 rounded-lg text-xs"><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">Telefone</span><span className="font-mono">{item.phone || '-'}</span></div><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">CNH Validade</span><span className={`${item.cnhValidity && new Date(item.cnhValidity) < new Date() ? 'text-red-400 font-bold' : ''}`}>{item.cnhValidity ? formatDisplayDate(item.cnhValidity) : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => { const msg = encodeURIComponent(`Olá ${item.name}, tudo bem?`); window.open(`https://wa.me/55${(item.phone||'').replace(/\D/g,'')}?text=${msg}`, '_blank'); }} className="flex-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-colors"><Icons.Phone size={14}/> WhatsApp</button><Button theme={theme} onClick={()=>{setFormData(item); setModal('driver')}} variant="secondary" className="px-3 py-2 text-xs" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="danger" onClick={()=>del('drivers', item.id)} icon={Icons.Trash}/></div></div>))}
+                                    {filteredList.map((item, i) => (<div key={item.id} style={{animationDelay: `${i * 50}ms`}} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden flex flex-col gap-4 group stagger-in premium-card`}><div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold uppercase tracking-wider ${item.status === 'Ativo' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{item.status}</div><div className="flex items-center gap-4"><div className={`w-16 h-16 rounded-full p-1 border-2 ${item.status === 'Ativo' ? 'border-green-500/50' : 'border-red-500/50'} flex-shrink-0`}><img src={getAvatarUrl(item.name)} alt="Avatar" className="w-full h-full rounded-full bg-slate-700/50"/></div><div className="flex-1 min-w-0"><h3 className="font-bold text-lg truncate">{item.name}</h3><div className="flex items-center gap-2 text-sm opacity-60"><span className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">{item.plate || 'SEM PLACA'}</span><span>•</span><span className="flex items-center gap-1"><Icons.Users size={12}/> {item.capacity} lug</span></div></div></div><div className="grid grid-cols-2 gap-3 bg-black/20 p-3 rounded-lg text-xs"><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">Telefone</span><span className="font-mono">{item.phone || '-'}</span></div><div className="flex flex-col"><span className="opacity-50 text-[10px] uppercase">CNH Validade</span><span className={`${item.cnhValidity && new Date(item.cnhValidity) < new Date() ? 'text-red-400 font-bold' : ''}`}>{item.cnhValidity ? formatDisplayDate(item.cnhValidity) : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => { const msg = encodeURIComponent(`Olá ${item.name}, tudo bem?`); window.open(`https://wa.me/55${(item.phone||'').replace(/\D/g,'')}?text=${msg}`, '_blank'); }} className="flex-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-colors"><Icons.Phone size={14}/> WhatsApp</button><Button theme={theme} onClick={()=>{setFormData(item); setModal('driver')}} variant="secondary" className="px-3 py-2 text-xs" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="danger" onClick={()=>del('drivers', item.id)} icon={Icons.Trash}/></div></div>))}
                                     {!filteredList.length && <div className="text-center opacity-50 py-10">Vazio.</div>}
                                 </div>
                             )}
@@ -2318,11 +2521,11 @@
                                 <div className="space-y-6">
                                     <div className="space-y-4">
                                         <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest pl-1">Hoje / Em Andamento</h3>
-                                        {activeTrips.slice().reverse().map(t => {
+                                        {activeTrips.slice().reverse().map((t, i) => {
                                             const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
                                             const tripPassengers = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
                                             return (
-                                                <div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-5 relative overflow-hidden shadow-lg ${t.isTemp ? 'border-dashed border-yellow-500/50' : ''}`}>
+                                                <div key={t.id} style={{animationDelay: `${i * 100}ms`}} className={`${theme.card} ${theme.radius} border ${theme.border} p-5 relative overflow-hidden shadow-lg ${t.isTemp ? 'border-dashed border-yellow-500/50' : ''} stagger-in premium-card`}>
                                                     {t.isTemp && (
                                                         <div className="absolute top-0 right-0 flex">
                                                             <div className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg flex items-center gap-1">
@@ -2352,11 +2555,11 @@
                                                         <Button theme={theme} onClick={()=>updateTripStatus(t.id, 'Cancelada')} variant="danger" size="sm" icon={Icons.X}>Cancelar</Button>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={()=>copyToClip(generateTripListText(tripPassengers, t.driverName, t.time))} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm"><Icons.Copy size={18}/> Copiar Lista</button>
-                                                        <button onClick={()=>sendWhatsapp(t)} className="flex-[2] bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"><Icons.Send size={18}/> WhatsApp</button>
+                                                        <button onClick={()=>copyToClip(generateTripListText(tripPassengers, t.driverName, t.time))} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm premium-click"><Icons.Copy size={18}/> Copiar Lista</button>
+                                                        <button onClick={()=>sendWhatsapp(t)} className="flex-[2] bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform premium-click"><Icons.Send size={18}/> WhatsApp</button>
                                                     </div>
                                                     <div className="mt-3 pt-3 border-t border-white/10">
-                                                        <button onClick={()=>duplicateTrip(t)} className="w-full bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2"><Icons.Repeat size={16}/> Duplicar para Hoje</button>
+                                                        <button onClick={()=>duplicateTrip(t)} className="w-full bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2 premium-click"><Icons.Repeat size={16}/> Duplicar para Hoje</button>
                                                     </div>
                                                 </div>
                                             );
@@ -2366,7 +2569,16 @@
                                     {/* --- ADVANCED HISTORY SECTION --- */}
                                     <div className="space-y-4 pt-6 border-t border-white/10">
                                         <div className="flex items-center justify-between mb-2">
-                                            <h3 className="text-sm font-bold opacity-50 uppercase tracking-widest pl-1">Histórico</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-sm font-bold opacity-50 uppercase tracking-widest pl-1">Histórico</h3>
+                                                <button 
+                                                    onClick={generateMonthSummary} 
+                                                    className="bg-white/5 hover:bg-white/10 p-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 text-blue-400" 
+                                                    title="Gerar Resumo do Mês"
+                                                >
+                                                    <Icons.List size={14}/> Resumo
+                                                </button>
+                                            </div>
                                             <div className="flex items-center gap-3 bg-black/20 p-1 rounded-lg">
                                                 <button onClick={prevHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronLeft size={18}/></button>
                                                 <span className="text-sm font-bold capitalize">{historyDate.toLocaleDateString('pt-BR', {month:'long', year:'numeric'})}</span>
@@ -2383,7 +2595,7 @@
                                                     const dayName = dateObj.toLocaleDateString('pt-BR', {weekday: 'long'});
 
                                                     return (
-                                                        <div key={group.date} className={`${theme.card} rounded-xl border border-white/5 overflow-hidden`}>
+                                                        <div key={group.date} className={`${theme.card} rounded-xl border border-white/5 overflow-hidden premium-card`}>
                                                             <div 
                                                                 onClick={() => toggleHistoryDay(group.date)}
                                                                 className="p-4 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors"
@@ -2429,12 +2641,103 @@
                                     </div>
                                 </div>
                             )}
+
+                            {/* --- NOVA ABA COBRANÇA --- */}
+                            {view === 'billing' && (
+                                <div className="space-y-6">
+                                    {/* Resumo Topo */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className={`${theme.card} p-4 rounded-xl border ${theme.border} bg-red-500/10 border-red-500/20 stagger-in d-1`}>
+                                            <div className="text-xs font-bold text-red-400 uppercase tracking-widest mb-1">A Receber (Pendente)</div>
+                                            <div className="text-3xl font-bold text-white">R$ {billingData.summary.pending},00</div>
+                                        </div>
+                                        <div className={`${theme.card} p-4 rounded-xl border ${theme.border} bg-green-500/10 border-green-500/20 stagger-in d-2`}>
+                                            <div className="text-xs font-bold text-green-400 uppercase tracking-widest mb-1">Recebido (Pago)</div>
+                                            <div className="text-3xl font-bold text-white">R$ {billingData.summary.paid},00</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Lista Agrupada por Dia */}
+                                    <div className="space-y-6 stagger-in d-3">
+                                        {billingData.groups.length > 0 ? billingData.groups.map((group, idx) => {
+                                            const [y, m, d] = group.date.split('-');
+                                            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+                                            const displayDate = `${d} de ${monthNames[parseInt(m)-1]}`;
+
+                                            return (
+                                                <div key={group.date} className="anim-fade" style={{animationDelay: `${idx * 100}ms`}}>
+                                                    <h3 className="flex items-center gap-3 text-sm font-bold opacity-60 uppercase tracking-widest mb-3 pl-1">
+                                                        <span>{displayDate}</span>
+                                                        <div className="h-[1px] bg-white/10 flex-1"></div>
+                                                        <span className="text-white/40">Total: R$ {group.totalValue},00</span>
+                                                    </h3>
+                                                    
+                                                    <div className="space-y-3">
+                                                        {group.trips.map(trip => (
+                                                            <div key={trip.id} className={`${theme.card} p-4 rounded-xl border ${theme.border} flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden premium-card`}>
+                                                                {/* Indicador Lateral de Status */}
+                                                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${trip.isPaid ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                                                
+                                                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg bg-white/5 border border-white/10 shrink-0`}>
+                                                                        {trip.time.split(':')[0]}h
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-bold text-lg flex items-center gap-2">
+                                                                            {trip.driverName}
+                                                                            {trip.isTemp && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/30 uppercase">Temp</span>}
+                                                                        </div>
+                                                                        <div className="text-sm opacity-60 flex items-center gap-2">
+                                                                            <span>{trip.pCount} passageiros</span>
+                                                                            <span>•</span>
+                                                                            <span className="font-mono">#{trip.id}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center justify-between w-full md:w-auto gap-6 bg-black/20 p-2 md:p-0 md:bg-transparent rounded-lg">
+                                                                    <div className="flex flex-col items-end md:items-end px-3 md:px-0">
+                                                                        <div className="text-xs opacity-50 uppercase font-bold">Valor</div>
+                                                                        <div className="text-xl font-bold text-yellow-400">R$ {trip.value},00</div>
+                                                                    </div>
+
+                                                                    <div className="flex gap-2">
+                                                                        <button 
+                                                                            onClick={() => togglePaymentStatus(trip)}
+                                                                            className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 border transition-all active:scale-95 ${trip.isPaid ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'}`}
+                                                                        >
+                                                                            {trip.isPaid ? <Icons.CheckCircle size={14}/> : <Icons.Clock size={14}/>}
+                                                                            {trip.isPaid ? 'PAGO' : 'PENDENTE'}
+                                                                        </button>
+                                                                        <button 
+                                                                            onClick={() => sendBillingMessage(trip)}
+                                                                            className="px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg active:scale-95"
+                                                                            title="Cobrar no WhatsApp"
+                                                                        >
+                                                                            <Icons.Phone size={16}/>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }) : (
+                                            <div className="text-center py-10 opacity-30 text-sm border-2 border-dashed border-white/10 rounded-xl">
+                                                Nenhuma viagem registrada para cobrança.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </div>
 
                     {modal && (
                         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-0 md:p-4">
-                            <div className={`${theme.card} w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-xl rounded-t-3xl md:rounded-2xl border ${theme.border} shadow-2xl flex flex-col`}>
+                            <div className={`${theme.card} w-full h-[95vh] md:h-auto md:max-h-[90vh] md:max-w-xl rounded-t-3xl md:rounded-2xl border ${theme.border} shadow-2xl flex flex-col page-transition`}>
                                 <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 shrink-0"><h2 className="text-xl font-bold">{modal==='trip'?'Criar Viagem':modal==='passenger'?'Passageiro':modal==='driver'?'Motorista':'Perdido & Achado'}</h2><button onClick={()=>setModal(null)} className="opacity-50"><Icons.X size={24}/></button></div>
                                 <div className="flex-1 scroll-y p-6 space-y-5 pb-10">
                                     <Input themeKey={themeKey} label="Data" type="date" value={formData.date || getTodayDate()} onChange={e=>setFormData({...formData, date:e.target.value})} />
@@ -2484,7 +2787,7 @@
                         </div>
                     )}
                     
-                    {aiModal && ( <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className={`w-full max-w-lg ${theme.card} p-6 rounded-2xl`}><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Icons.Stars/> Cadastro Mágico</h3><p className="text-sm opacity-60 mb-4">Digite ou cole (ex: "Maria vai pro Boqueirão as 18h pagando Pix")</p><textarea className="w-full h-32 bg-black/20 p-4 rounded-xl border border-white/10 mb-4 text-base" value={aiInput} onChange={e=>setAiInput(e.target.value)} placeholder="Digite aqui..."></textarea><div className="flex justify-between items-center"><button onClick={toggleMic} className={`p-3 rounded-full ${isListening ? 'listening text-white' : 'bg-white/10 text-slate-400'}`}><Icons.Mic size={24}/></button><div className="flex gap-3"><Button themeKey={themeKey} variant="secondary" onClick={()=>setAiModal(false)}>Cancelar</Button><Button themeKey={themeKey} variant="primary" onClick={handleSmartCreate} disabled={aiLoading}>{aiLoading ? '...' : 'Criar'}</Button></div></div></div></div> )}
+                    {aiModal && ( <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className={`w-full max-w-lg ${theme.card} p-6 rounded-2xl page-transition`}><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Icons.Stars/> Cadastro Mágico</h3><p className="text-sm opacity-60 mb-4">Digite ou cole (ex: "Maria vai pro Boqueirão as 18h pagando Pix")</p><textarea className="w-full h-32 bg-black/20 p-4 rounded-xl border border-white/10 mb-4 text-base" value={aiInput} onChange={e=>setAiInput(e.target.value)} placeholder="Digite aqui..."></textarea><div className="flex justify-between items-center"><button onClick={toggleMic} className={`p-3 rounded-full ${isListening ? 'listening text-white' : 'bg-white/10 text-slate-400'}`}><Icons.Mic size={24}/></button><div className="flex gap-3"><Button themeKey={themeKey} variant="secondary" onClick={()=>setAiModal(false)}>Cancelar</Button><Button themeKey={themeKey} variant="primary" onClick={handleSmartCreate} disabled={aiLoading}>{aiLoading ? '...' : 'Criar'}</Button></div></div></div></div> )}
                     {renderContextMenu()}
                 </div>
             );
