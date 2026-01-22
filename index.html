@@ -400,8 +400,15 @@
                 wrapper.style.padding = '40px'; 
                 wrapper.style.zIndex = '99999';
                 
+                // DATA DO TÍTULO DO PRINT
+                let dateStr = new Date().toLocaleDateString('pt-BR');
+                if (options.date) {
+                    const [y, m, d] = options.date.split('-');
+                    dateStr = `${d}/${m}/${y}`;
+                }
+
                 const titleEl = document.createElement('h1');
-                titleEl.innerText = `${title} - ${new Date().toLocaleDateString('pt-BR')}`;
+                titleEl.innerText = `${title} - ${dateStr}`;
                 titleEl.style.textAlign = 'center';
                 titleEl.style.marginBottom = '25px';
                 titleEl.style.fontSize = '32px'; 
@@ -421,6 +428,18 @@
                     el.style.display = 'block';
                 });
 
+                // --- CORREÇÃO DE CORTE DE NOMES (TRUNCATE) ---
+                // Removemos qualquer classe ou estilo que possa cortar o texto
+                const truncatedElements = clone.querySelectorAll('.truncate');
+                truncatedElements.forEach(el => {
+                    el.classList.remove('truncate');
+                    el.style.overflow = 'visible';
+                    el.style.textOverflow = 'clip';
+                    el.style.whiteSpace = 'nowrap'; // Mantém em uma linha, mas expande a largura
+                    el.style.maxWidth = 'none';
+                    el.style.width = 'auto';
+                });
+
                 const textElements = clone.querySelectorAll('.font-bold, .font-mono');
                 textElements.forEach(el => {
                     const style = window.getComputedStyle(el);
@@ -428,13 +447,143 @@
                     if (fontSize) {
                         el.style.fontSize = `${fontSize * 1.25}px`; 
                     }
+                    // Garante que o texto não seja cortado verticalmente
+                    el.style.lineHeight = '1.4';
+                    el.style.overflow = 'visible';
                 });
 
+                // CORREÇÃO DE LAYOUT PARA PRINT
                 Array.from(clone.children).forEach(child => {
                     child.style.display = 'flex';
                     child.style.alignItems = 'center'; 
-                    child.style.justifyContent = 'space-between';
-                    child.style.padding = '10px'; 
+                    
+                    // AJUSTE: Se for Madrugada, alinha à esquerda. Se não, mantém separado (space-between).
+                    if (options.mode === 'madrugada') {
+                        child.style.justifyContent = 'flex-start';
+                        child.style.gap = '20px'; // Espaço entre a vaga e o nome na madrugada
+                    } else {
+                        child.style.justifyContent = 'space-between';
+                    }
+
+                    child.style.padding = '10px 15px'; 
+                    child.style.height = 'auto';
+                    child.style.minHeight = '50px'; 
+                    child.style.overflow = 'visible'; // Permite que conteúdos passem do limite se precisar
+                    
+                    // Força alinhamento nos containers internos
+                    const innerFlexs = child.querySelectorAll('div.flex, .flex');
+                    innerFlexs.forEach(g => {
+                        g.style.display = 'flex';
+                        g.style.alignItems = 'center'; 
+                        g.style.height = '100%';
+                        g.style.overflow = 'visible';
+                    });
+
+                    // Correção específica para o quadrado do número da vaga
+                    const vagaBox = child.querySelector('.font-mono.rounded');
+                    if (vagaBox) {
+                        vagaBox.style.padding = '0'; 
+                        vagaBox.style.display = 'flex';
+                        vagaBox.style.alignItems = 'center';
+                        vagaBox.style.justifyContent = 'center';
+                        vagaBox.style.height = '34px'; 
+                        vagaBox.style.width = '38px'; 
+                        vagaBox.style.lineHeight = '1';
+                        
+                        // AJUSTE SOLICITADO:
+                        // 1. Aumenta fonte em +7px e força BOLD
+                        const currentSize = parseFloat(window.getComputedStyle(vagaBox).fontSize);
+                        vagaBox.style.fontSize = `${currentSize + 7}px`;
+                        vagaBox.style.fontWeight = '900'; // Extra Bold
+
+                        // 2. Abaixa o quadrado em 5px 
+                        // (Estava -11px para subir, alterando para -6px ele desce 5px em relação ao anterior)
+                        vagaBox.style.marginTop = '-6px'; 
+                        vagaBox.style.marginBottom = '0';
+                    }
+
+                    // Correção para o Nome (evitar corte e alinhar risco)
+                    const nameSpan = child.querySelector('span.font-bold');
+                    if (nameSpan) {
+                        nameSpan.style.display = 'inline-block'; 
+                        nameSpan.style.lineHeight = '1.4';
+                        nameSpan.style.verticalAlign = 'middle';
+                        
+                        // AJUSTE: Sobe para acompanhar a vaga
+                        nameSpan.style.marginTop = '-8px'; 
+                        
+                        nameSpan.style.overflow = 'visible'; 
+                        
+                        // --- CORREÇÃO DEFINITIVA DO RISCADO ---
+                        // Substitui o text-decoration nativo por uma linha física (div)
+                        // Isso garante que o risco fique EXATAMENTE no meio, sem flutuar pra cima.
+                        if (nameSpan.classList.contains('line-through') || nameSpan.style.textDecoration.includes('line-through')) {
+                            // Remove o riscado nativo bugado
+                            nameSpan.style.textDecoration = 'none';
+                            nameSpan.classList.remove('line-through');
+                            
+                            // Prepara o container
+                            nameSpan.style.position = 'relative';
+                            
+                            // Cria a linha manualmente
+                            const strikeLine = document.createElement('div');
+                            strikeLine.style.position = 'absolute';
+                            strikeLine.style.left = '-2px';   // Um pouco mais largo que o texto
+                            strikeLine.style.right = '-2px';
+                            
+                            // AJUSTE FINO: Subindo 7px (estava +15px, agora fica +8px)
+                            strikeLine.style.top = 'calc(50% + 8px)';     
+                            
+                            strikeLine.style.height = '3px';  // Espessura do risco
+                            strikeLine.style.backgroundColor = '#f87171'; // Cor vermelha (red-400) para garantir visibilidade
+                            strikeLine.style.borderRadius = '2px';
+                            strikeLine.style.zIndex = '10';
+                            
+                            // Adiciona a linha dentro do nome
+                            nameSpan.appendChild(strikeLine);
+                            
+                            // Força opacidade visual de "item desativado"
+                            nameSpan.style.opacity = '0.7';
+                        }
+                    }
+
+                    // AJUSTE: Correção para o Horário (Time) seguindo o mesmo padrão do Nome
+                    const timeSpan = child.querySelector('span.font-mono.text-lg');
+                    if (timeSpan) {
+                        timeSpan.style.display = 'inline-block';
+                        timeSpan.style.lineHeight = '1.4';
+                        timeSpan.style.verticalAlign = 'middle';
+                        
+                        // Sobe para alinhar com o nome e a vaga
+                        timeSpan.style.marginTop = '-8px'; 
+                        
+                        timeSpan.style.overflow = 'visible';
+
+                        // Se estiver riscado, aplicamos a linha manual
+                        if (timeSpan.classList.contains('line-through') || timeSpan.style.textDecoration.includes('line-through')) {
+                            timeSpan.style.textDecoration = 'none';
+                            timeSpan.classList.remove('line-through');
+                            
+                            timeSpan.style.position = 'relative';
+                            
+                            const strikeLine = document.createElement('div');
+                            strikeLine.style.position = 'absolute';
+                            strikeLine.style.left = '-2px';
+                            strikeLine.style.right = '-2px';
+                            
+                            // Mesma altura exata da linha do nome (+8px do centro)
+                            strikeLine.style.top = 'calc(50% + 8px)';     
+                            
+                            strikeLine.style.height = '3px';
+                            strikeLine.style.backgroundColor = '#f87171'; // Vermelho
+                            strikeLine.style.borderRadius = '2px';
+                            strikeLine.style.zIndex = '10';
+                            
+                            timeSpan.appendChild(strikeLine);
+                            
+                            timeSpan.style.opacity = '0.7';
+                        }
+                    }
                 });
                 
                 clone.style.width = '100%';
@@ -443,10 +592,10 @@
 
                 const contentContainer = document.createElement('div');
                 if (columns > 1) {
-                    const colWidth = 500; 
+                    const colWidth = 600; // Aumentei a largura da coluna para dar mais espaço aos nomes
                     wrapper.style.width = `${columns * colWidth + 80}px`; 
                     contentContainer.style.columnCount = columns.toString();
-                    contentContainer.style.columnGap = '30px';
+                    contentContainer.style.columnGap = '40px';
                     
                     Array.from(clone.children).forEach(child => {
                         child.style.breakInside = 'avoid';
@@ -454,7 +603,8 @@
                         child.style.marginBottom = '15px';
                     });
                 } else {
-                    wrapper.style.width = `${Math.max(element.scrollWidth, 600) + 80}px`;
+                    // Largura dinâmica baseada no conteúdo, com mínimo seguro
+                    wrapper.style.width = `${Math.max(element.scrollWidth + 100, 700)}px`;
                 }
 
                 contentContainer.appendChild(clone);
@@ -468,7 +618,8 @@
                     scale: 2,
                     useCORS: true,
                     windowWidth: target.scrollWidth,
-                    width: target.scrollWidth
+                    width: target.scrollWidth,
+                    height: target.scrollHeight + 50 // Garante altura extra no canvas
                 });
 
                 const link = document.createElement('a');
@@ -1858,7 +2009,10 @@
 
             if (!user) return <LoginScreen onLogin={handleLogin} />;
 
-            const currentRotatedList = getRotatedList(getTodayDate());
+            // ATENÇÃO: Mudança crítica aqui!
+            // Usamos currentOpDate em vez de getTodayDate().
+            // Isso garante que a lista 'rodada' (ordem dos motoristas) respeite a virada das 19:30.
+            const currentRotatedList = getRotatedList(currentOpDate);
             const analysisRotatedList = getRotatedList(analysisDate);
             
             const { confirmedTimes, startLousaTime } = getTableTimes();
@@ -1904,7 +2058,7 @@
                                                     <div className="px-4 font-mono font-bold text-sm">{formatDisplayDate(analysisDate)}</div>
                                                     <button onClick={() => setAnalysisDate(dateAddDays(analysisDate, 1))} className="p-2 hover:bg-white/10 rounded-md"><Icons.ChevronRight size={20}/></button>
                                                     <button onClick={() => setAnalysisDate(currentOpDate)} className="ml-2 text-xs bg-white/10 px-2 py-1 rounded hover:bg-white/20">{currentOpDate === getTodayDate() ? 'Hoje' : 'Amanhã (Op)'}</button>
-                                                    <button onClick={() => handlePrint('print-tabela-list', 'Tabela_Geral', 'TABELA GERAL', { forceCols: 2 })} className="ml-4 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors" title="Salvar como Imagem (2 Colunas)"><Icons.Print size={20}/></button>
+                                                    <button onClick={() => handlePrint('print-tabela-list', 'Tabela_Geral', 'TABELA GERAL', { forceCols: 2, date: analysisDate })} className="ml-4 p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors" title="Salvar como Imagem (2 Colunas)"><Icons.Print size={20}/></button>
                                                 </div>
                                             </div>
                                             <div id="print-tabela-list" className="space-y-2">
@@ -1924,7 +2078,7 @@
                                     {tableTab === 'confirmados' && (
                                         <div className="flex flex-col gap-4 anim-fade">
                                             <div className={`${theme.card} p-5 rounded-xl border ${theme.border} border-green-500/30 relative overflow-hidden`}>
-                                                <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-2"><h3 className="text-lg font-bold text-green-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> CONFIRMADOS</h3><button onClick={() => handlePrint('print-confirmados-list', 'Confirmados', 'LISTA DE CONFIRMADOS', { mode: 'confirmados' })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.CheckCircle size={64}/></div>
+                                                <div className="flex justify-between items-start mb-4 border-b border-white/10 pb-2"><h3 className="text-lg font-bold text-green-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500"></span> CONFIRMADOS</h3><button onClick={() => handlePrint('print-confirmados-list', 'Confirmados', 'LISTA DE CONFIRMADOS', { mode: 'confirmados', date: currentOpDate })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.CheckCircle size={64}/></div>
                                                 <div id="print-confirmados-list" className="space-y-2 min-h-[100px]">
                                                     {currentRotatedList.filter(d => tableStatus[d.vaga] === 'confirmed').map((driver) => {
                                                         const timeStr = confirmedTimes[driver.vaga];
@@ -1961,7 +2115,7 @@
                                     )}
                                     {tableTab === 'lousa' && (
                                         <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} border-yellow-500/30 relative anim-fade`}>
-                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-white/10 pb-2 gap-3 sm:gap-0"><h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> LOUSA</h3><div className="flex w-full sm:w-auto justify-end"><button onClick={() => handlePrint('print-lousa-list', 'Lousa', 'LOUSA / FILA', { mode: 'lousa' })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.List size={64}/></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
+                                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-white/10 pb-2 gap-3 sm:gap-0"><h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> LOUSA</h3><div className="flex w-full sm:w-auto justify-end"><button onClick={() => handlePrint('print-lousa-list', 'Lousa', 'LOUSA / FILA', { mode: 'lousa', date: currentOpDate })} className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors text-white" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div><div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Icons.List size={64}/></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
                                             <div id="print-lousa-list" className="space-y-2 min-h-[300px]">{lousaOrder.map((item, index) => { 
                                                 const vaga = item.vaga; 
                                                 const driver = spList.find(d => d.vaga === vaga) || { name: '' }; 
@@ -2003,7 +2157,7 @@
                                     )}
                                     {tableTab === 'madrugada' && (
                                         <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} anim-fade overflow-hidden`}>
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0"><h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3><div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto"><button onClick={addMadrugadaVaga} className="bg-green-600/20 text-green-400 border border-green-500/30 px-3 py-1 rounded text-xs font-bold hover:bg-green-600/30 whitespace-nowrap">Adicionar Vaga</button><div className="flex items-center gap-2"><span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span><button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA')} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0"><h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3><div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto"><button onClick={addMadrugadaVaga} className="bg-green-600/20 text-green-400 border border-green-500/30 px-3 py-1 rounded text-xs font-bold hover:bg-green-600/30 whitespace-nowrap">Adicionar Vaga</button><div className="flex items-center gap-2"><span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span><button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: currentOpDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
                                             <div id="print-madrugada-list" className="space-y-2">{madrugadaList.map((vaga, index) => { const driver = spList.find(d => d.vaga === vaga) || { name: 'Desconhecido' }; const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; return ( <div key={`${vaga}-${index}`} draggable="true" onDragStart={(e) => handleMadrugadaDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleMadrugadaDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'madrugada')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'madrugada'); } else { handleTouchEnd(e, -1, 'madrugada'); } }} className={`flex flex-col md:flex-row items-center gap-2 p-3 bg-black/20 rounded-lg border border-white/5 draggable-item cursor-grab active:cursor-grabbing ${isDraggingThis ? 'opacity-50 border-indigo-500 scale-105 shadow-2xl z-50 bg-indigo-900/40' : ''}`}> <div className="flex items-center gap-3 w-full md:w-auto flex-1 relative min-w-0"> <div className="opacity-30 cursor-grab hide-on-print flex-shrink-0"><Icons.List size={14}/></div> <button onClick={() => removeMadrugadaVaga(vaga)} className="text-red-400 opacity-50 hover:opacity-100 hide-on-print flex-shrink-0"><Icons.Trash size={14}/></button> <button onClick={() => toggleMadrugadaRiscado(vaga)} className={`p-1 rounded hover:bg-white/10 flex-shrink-0 ${mData.riscado ? 'text-red-400' : 'text-white/30'} hide-on-print`}> <Icons.Slash size={14}/> </button> <div className="font-mono text-sm bg-indigo-500/20 text-indigo-300 w-[35px] h-[30px] rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px]">{vaga}</div> <div className="flex flex-col min-w-0 flex-1"> <span className={`font-bold text-lg truncate ${mData.riscado ? 'line-through opacity-50' : ''}`}>{driver.name}</span> {mData.riscado && mData.comment && ( <div className="text-[12px] text-red-300 bg-red-900/30 px-2 py-1 rounded w-fit flex items-center justify-center leading-none mt-1 truncate max-w-full">{mData.comment}</div> )} </div> </div> {!mData.riscado && ( <div className="flex items-center gap-2 w-full md:w-auto md:justify-end flex-shrink-0 mt-2 md:mt-0"> <div className="flex gap-2 hide-on-print w-full md:w-auto"> <input type="number" placeholder="Qtd" className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-20 text-center outline-none focus:border-indigo-500 transition-colors" value={mData.qtd} onChange={(e) => handleMadrugadaChange(vaga, 'qtd', e.target.value)} /> <select className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-32 outline-none focus:border-indigo-500 transition-colors" value={mData.time} onChange={(e) => handleMadrugadaChange(vaga, 'time', e.target.value)} > <option value="">Horário</option> <option value="4:00/4:45">04:00/45</option> <option value="5:00/5:45">05:00/45</option> <option value="6:00/6:45">06:00/45</option> </select> </div> <div className="show-on-print hidden font-bold text-indigo-200 text-lg"> <span>{mData.time}</span> {mData.qtd && <span className="ml-2 opacity-70">({mData.qtd})</span>} </div> </div> )} </div> ); })} {madrugadaList.length === 0 && <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada hoje.</div>} </div>
                                         </div>
                                     )}
