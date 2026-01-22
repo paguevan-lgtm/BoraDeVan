@@ -1726,6 +1726,34 @@
                         return max;
                     }, 0);
 
+                    // --- NOVA REGRA DE CONTROLE DE FLUXO ---
+                    // Só permite criar nova vaga temporária se as atuais estiverem quase expirando (< 15 min restantes)
+                    // Isso evita acumular muitas vagas temporárias na tela ao mesmo tempo.
+                    const currentTempTrips = data.trips.filter(t => t.isTemp && t.date === getTodayDate() && (t.status === 'Em andamento' || t.status === 'Ativo'));
+                    let blockCreation = false;
+                    
+                    if (currentTempTrips.length > 0) {
+                        // Verifica se ALGUMA viagem ativa tem mais de 15 min de vida restante
+                        blockCreation = currentTempTrips.some(t => {
+                            const [h, m] = t.time.split(':').map(Number);
+                            const tDate = new Date();
+                            tDate.setHours(h, m, 0, 0);
+                            
+                            // Ajuste virada de dia
+                            if (now.getHours() < 5 && h > 20) tDate.setDate(tDate.getDate() - 1);
+                            else if (now.getHours() > 20 && h < 5) tDate.setDate(tDate.getDate() + 1);
+                            
+                            // A viagem expira visualmente em: Horário Visual - 15 minutos
+                            // Ex: Viagem 18:00 (Slot 17:00) -> Expira 17:45.
+                            const expirationTime = tDate.getTime() - 15 * 60000;
+                            const msLeft = expirationTime - now.getTime();
+                            const minutesLeft = msLeft / 60000;
+                            
+                            // Se faltar mais de 15 minutos para expirar, BLOQUEIA novas criações
+                            return minutesLeft > 15;
+                        });
+                    }
+
                     // 2. Processar Criação e Deleção
                     activeSlots.forEach(slot => {
                         if (!slot.time) return;
@@ -1757,7 +1785,7 @@
                             // AJUSTE: Calcula o horário da viagem (Slot + 60min)
                             const tripTime = addMinutes(slot.time, 60);
 
-                            // TRAVA DE SEGURANÇA: Verifica se já existe registro
+                            // TRAVA DE SEGURANÇA: Verifica se ESTA viagem específica já existe
                             const tripAlreadyExists = data.trips.some(t => 
                                 t.driverId === driverDb.id && 
                                 t.date === slotDateStr &&
@@ -1766,8 +1794,9 @@
 
                             if (tripAlreadyExists) return;
 
-                            // A) CRIAÇÃO: Janela expandida para -30min (cria antes do horário) até 45min
-                            if (diffMinutes >= -30 && diffMinutes <= 45) {
+                            // A) CRIAÇÃO: 
+                            // CORREÇÃO: Alterado de -30 para -1. 
+                            if (!blockCreation && diffMinutes >= -1 && diffMinutes <= 45) {
                                 // Incrementa o ID baseado no último maior encontrado
                                 currentMaxId++;
                                 const nextId = currentMaxId.toString();
@@ -1786,7 +1815,7 @@
                             }
                         });
 
-                    // B) DELEÇÃO: Verificar viagens temporárias expiradas
+                    // B) DELEÇÃO: Verificar viagens temporárias expiradas OU futuras demais
                     data.trips.forEach(t => {
                         if (t.isTemp && t.date === getTodayDate() && t.status !== 'Finalizada') {
                             const [h, m] = t.time.split(':').map(Number);
@@ -1798,6 +1827,7 @@
                             else if (now.getHours() > 20 && h < 5) tripDate.setDate(tripDate.getDate() + 1);
                             
                             // Diff agora é baseado no horário VISUAL da viagem (Ex: 09:00).
+                            // Se a viagem é 09:00, o slot original era 08:00.
                             const diff = (now - tripDate) / 60000;
                             
                             // AJUSTE: Verifica se a vaga ainda existe na tabela (Case Insensitive)
@@ -1805,8 +1835,12 @@
                                 spList.find(d => d.vaga === s.vaga)?.name.toLowerCase() === t.driverName.toLowerCase()
                             ));
                             
-                            // DELEÇÃO: Remove se expirou ou se a vaga sumiu da tabela
-                            if (diff > -15 || (!isActiveSlot && diff > -59)) {
+                            // LÓGICA DE DELEÇÃO REFORÇADA:
+                            // 1. diff > -15: Expirou (Passou de 45min do slot real)
+                            // 2. diff < -62: Futuro demais! (Ocorre se foi criada antes da janela de -1 min do slot real)
+                            //    Cálculo: Slot(-1) + 60 = Visual(-61). Então se diff < -61 (ex: -70), apaga.
+                            // 3. !isActiveSlot: Vaga sumiu da tabela.
+                            if (diff > -15 || diff < -62 || (!isActiveSlot && diff > -59)) {
                                 db.ref('trips').child(t.id).remove();
                             }
                         }
