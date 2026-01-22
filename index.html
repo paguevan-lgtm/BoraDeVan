@@ -119,6 +119,7 @@
             position: absolute;
             z-index: 10002;
             width: 320px;
+            max-width: 85vw; /* CORREÇÃO: Garante que não vaze no mobile */
             pointer-events: auto;
             transition: all 0.4s var(--ease-out-expo);
         }
@@ -848,6 +849,8 @@
 
                 const updatePosition = () => {
                     const target = document.querySelector(step.target);
+                    const isMobile = window.innerWidth < 768;
+
                     if (target) {
                         const rect = target.getBoundingClientRect();
                         setTargetRect({
@@ -864,22 +867,32 @@
 
                         // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
                         if (step.placement === 'top') {
-                            tooltipTop = rect.top - 300; // Joga bem pra cima (altura estimada do card + margem)
-                            // Se o elemento for estreito, centraliza. Se for largo, ajusta.
+                            tooltipTop = rect.top - (isMobile ? 250 : 300); // Ajuste altura no mobile
                             tooltipLeft = rect.left + (rect.width / 2) - 160;
-                            arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; // Seta pra baixo
-                        } else if (step.placement === 'right') {
-                            tooltipTop = rect.top; // Alinha com o topo do elemento
-                            tooltipLeft = rect.right + 20; // À direita
-                            arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' }; // Seta pra esquerda
+                            arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
+                        } else if (step.placement === 'right' && !isMobile) {
+                            // Só usa 'right' no desktop. No mobile, joga pra baixo pra caber.
+                            tooltipTop = rect.top; 
+                            tooltipLeft = rect.right + 20; 
+                            arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' }; 
+                        } else if (step.placement === 'bottom') {
+                             tooltipTop = rect.bottom + 20;
+                             tooltipLeft = rect.left + (rect.width / 2) - 160;
+                             arrow = { top: -8, left: '50%', transform: 'translateX(-50%) rotate(45deg)' };
                         } else {
-                            // --- AUTO CORREÇÃO PARA BORDAS ---
+                            // --- AUTO CORREÇÃO INTELIGENTE ---
                             
-                            // Se for alto e na esquerda (Menu Geral) -> Joga pra direita
+                            // Se for alto e na esquerda (Menu) -> No mobile, foca no centro/baixo
                             if (rect.height > window.innerHeight * 0.7 && rect.left < window.innerWidth / 2) {
-                                tooltipTop = rect.top + 100;
-                                tooltipLeft = rect.right + 20;
-                                arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' };
+                                if (isMobile) {
+                                    tooltipTop = 100; // Fixo no topo relativo
+                                    tooltipLeft = window.innerWidth / 2 - 160;
+                                    arrow = null; // Sem seta em overlay total
+                                } else {
+                                    tooltipTop = rect.top + 100;
+                                    tooltipLeft = rect.right + 20;
+                                    arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' };
+                                }
                             }
                             // Se estiver muito embaixo da tela -> Joga pra CIMA
                             else if (tooltipTop + 250 > window.innerHeight) {
@@ -888,14 +901,26 @@
                             }
                         }
 
-                        // Ajustes finais de borda lateral (Mobile safe) para não vazar a tela
+                        // AJUSTES FINAIS DE BORDA (CRÍTICO PARA MOBILE)
+                        const tooltipWidth = Math.min(320, window.innerWidth * 0.85); // Largura real do tooltip
+                        
+                        // Garante margem esquerda
                         if (tooltipLeft < 10) { 
                             tooltipLeft = 10;
-                            if (arrow.left === '50%') arrow.left = (rect.left + rect.width/2) - 10 + 'px'; 
+                            if (arrow && arrow.left === '50%') arrow.left = (rect.left + rect.width/2) - 10 + 'px'; 
                         }
-                        if (tooltipLeft + 320 > window.innerWidth) {
-                            tooltipLeft = window.innerWidth - 330;
-                            if (arrow.left === '50%') arrow.left = (rect.left - tooltipLeft) + rect.width/2 + 'px';
+                        
+                        // Garante margem direita
+                        if (tooltipLeft + tooltipWidth > window.innerWidth) {
+                            tooltipLeft = window.innerWidth - tooltipWidth - 10;
+                            if (arrow && arrow.left === '50%') {
+                                // Recalcula a seta para apontar pro elemento
+                                let arrowOffset = (rect.left + rect.width/2) - tooltipLeft;
+                                // Limita a seta dentro do balão
+                                arrowOffset = Math.max(10, Math.min(tooltipWidth - 20, arrowOffset));
+                                arrow.left = arrowOffset + 'px';
+                                arrow.transform = 'translateX(0) rotate(45deg)'; // Remove o translate 50%
+                            }
                         }
 
                         setPosition({ top: tooltipTop, left: tooltipLeft });
@@ -903,14 +928,14 @@
                         
                         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     } else {
-                        // Se não achar o alvo (ex: passo 1), centraliza
+                        // Fallback centralizado
                         setTargetRect(null);
                         setPosition({ top: window.innerHeight/2 - 100, left: window.innerWidth/2 - 160 });
                         setArrowPos(null);
                     }
                 };
 
-                setTimeout(updatePosition, 300);
+                setTimeout(updatePosition, 400); // Delay maior para dar tempo do menu abrir
                 window.addEventListener('resize', updatePosition);
                 return () => window.removeEventListener('resize', updatePosition);
             }, [currentStep, steps]);
@@ -1162,7 +1187,7 @@
                 },
                 {
                     title: "Menu Inteligente",
-                    content: "Aqui à esquerda você navega entre as áreas. Você pode segurar e arrastar os ícones para organizar a ordem como preferir!",
+                    content: "Aqui você navega entre as áreas. Segure e arraste os ícones para organizar a ordem como preferir!",
                     target: "#sidebar-nav",
                     placement: 'right'
                 },
@@ -1175,7 +1200,7 @@
                     title: "Cadastro Mágico com IA ✨",
                     content: "Não perca tempo digitando! Clique aqui, fale ou escreva algo como 'João vai pro Boqueirão as 18h' e nossa IA preenche tudo sozinha.",
                     target: "#btn-magic-create",
-                    placement: 'top' // CORREÇÃO: Força o balão para CIMA para não tapar o botão
+                    placement: 'top'
                 },
                 {
                     title: "Agendamentos",
@@ -1222,7 +1247,7 @@
                     content: "Controle quem te deve! O sistema calcula R$ 4,00 por passageiro. Marque como Pago/Pendente e cobre no Zap.",
                     target: "#menu-btn-billing",
                     view: "billing",
-                    placement: 'right' // CORREÇÃO: Balão à direita para não sobrepor
+                    placement: 'right'
                 },
                 {
                     title: "Perdidos e Achados 📦",
@@ -1329,6 +1354,27 @@
                 });
                 return () => ref.off('value', cb);
             }, [db, user, isFireConnected]);
+
+            // EFFECT PARA CONTROLAR O MENU DURANTE O TOUR (MOBILE FIX)
+            useEffect(() => {
+                if (!runTour) return;
+                const step = TOUR_STEPS[tourStep];
+                if (!step) return;
+
+                const isMobile = window.innerWidth < 768;
+                
+                if (isMobile) {
+                    // Verifica se o alvo é um item do menu ou a barra lateral
+                    const isMenuTarget = step.target && (step.target.startsWith('#menu-btn-') || step.target === '#sidebar-nav');
+                    
+                    if (isMenuTarget) {
+                        setMenuOpen(true);
+                    } else {
+                        // Se for um item de conteúdo (ex: dashboard, abas), fecha o menu
+                        setMenuOpen(false);
+                    }
+                }
+            }, [tourStep, runTour]);
 
             useEffect(() => {
                  if (!db || !user || !isFireConnected) return; 
