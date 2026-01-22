@@ -2071,14 +2071,58 @@
                 
                 if (itemIndex === -1 && action !== 'duplicate' && action !== 'remove_all') return;
 
+                // Garante que estamos modificando uma cópia do objeto para evitar mutação direta
+                if (itemIndex > -1) newLousa[itemIndex] = { ...newLousa[itemIndex] };
+
                 if (action === 'riscar') {
-                    newLousa[itemIndex].riscado = !newLousa[itemIndex].riscado;
+                    // LÓGICA DE RISCAR (Atualizada)
+                    const newRiscadoState = !newLousa[itemIndex].riscado;
+                    newLousa[itemIndex].riscado = newRiscadoState;
+                    
+                    if (newRiscadoState) {
+                        // Se marcou como riscado, remove o status Baixou
+                        // E se tinha uma duplicata criada pelo Baixou, deleta ela automaticamente
+                        if (newLousa[itemIndex].baixou && newLousa[itemIndex].duplicatedUid) {
+                            const dupIndex = newLousa.findIndex(i => i.uid === newLousa[itemIndex].duplicatedUid);
+                            if (dupIndex !== -1) newLousa.splice(dupIndex, 1);
+                            delete newLousa[itemIndex].duplicatedUid; // Limpa a referência
+                        }
+                        newLousa[itemIndex].baixou = false;
+                    }
+
                 } else if (action === 'baixar') {
-                    const [item] = newLousa.splice(itemIndex, 1);
-                    newLousa.push(item);
+                    // LÓGICA DE BAIXAR (Atualizada com Rastreamento e Deleção)
+                    
+                    if (newLousa[itemIndex].baixou) {
+                        // DESATIVAR: Se já estava "BAIXOU", volta ao normal
+                        newLousa[itemIndex].baixou = false;
+                        
+                        // DELETA A DUPLICATA que foi criada anteriormente (se ainda existir)
+                        if (newLousa[itemIndex].duplicatedUid) {
+                            const dupIndex = newLousa.findIndex(i => i.uid === newLousa[itemIndex].duplicatedUid);
+                            if (dupIndex !== -1) newLousa.splice(dupIndex, 1);
+                            delete newLousa[itemIndex].duplicatedUid;
+                        }
+
+                    } else {
+                        // ATIVAR: Marca como "BAIXOU"
+                        newLousa[itemIndex].baixou = true;
+                        newLousa[itemIndex].riscado = false; // Remove riscado se houver
+                        
+                        // Cria duplicata no fim e SALVA O ID DELA NA ORIGINAL
+                        const newUid = generateUniqueId();
+                        newLousa[itemIndex].duplicatedUid = newUid;
+                        
+                        newLousa.push({ 
+                            vaga: newLousa[itemIndex].vaga, 
+                            uid: newUid, 
+                            riscado: false, 
+                            baixou: false 
+                        });
+                    }
+
                 } else if (action === 'remove') {
                     const itemToRemove = newLousa[itemIndex];
-                    // Se remover da lousa, remove também a viagem temporária se existir
                     if(itemToRemove) removeTempTrip(itemToRemove.vaga);
 
                     newLousa.splice(itemIndex, 1);
@@ -2087,14 +2131,13 @@
                         db.ref(`daily_tables/${currentOpDate}/status/${vagaRef}`).remove();
                     }
                 } else if (action === 'remove_all') {
-                    // Se remover todas as entradas, remove a viagem temporária
                     removeTempTrip(vagaRef);
-
                     newLousa = newLousa.filter(i => i.vaga !== vagaRef);
                     db.ref(`daily_tables/${currentOpDate}/status/${vagaRef}`).remove();
                 } else if (action === 'duplicate') {
                     const original = newLousa[itemIndex];
-                    newLousa.push({ vaga: original.vaga, uid: generateUniqueId(), riscado: false });
+                    // Duplicação manual não vinculada (não deleta auto)
+                    newLousa.push({ vaga: original.vaga, uid: generateUniqueId(), riscado: false, baixou: false });
                 }
 
                 db.ref(`daily_tables/${currentOpDate}`).update({ lousaOrder: newLousa });
@@ -3035,15 +3078,28 @@
                                                 const vaga = item.vaga; 
                                                 const driver = spList.find(d => d.vaga === vaga) || { name: '' }; 
                                                 const isRiscado = item.riscado; 
-                                                let displayTime = '---'; 
+                                                const isBaixou = item.baixou;
+                                                
+                                                let displayContent = '---'; 
                                                 let isExpired = false;
+                                                let timeClass = 'text-yellow-400';
 
-                                                if (!isRiscado) { 
+                                                // Lógica de Exibição (Texto ou Hora)
+                                                if (isRiscado) {
+                                                    displayContent = 'RISCOU';
+                                                    timeClass = 'text-red-500 font-bold';
+                                                } else if (isBaixou) {
+                                                    displayContent = 'BAIXOU';
+                                                    timeClass = 'text-red-500 font-bold'; // AGORA É VERMELHO
+                                                } else {
+                                                    // Só calcula hora se não estiver riscado nem baixado
+                                                    // Isso faz com que os próximos itens "subam" o horário automaticamente
                                                     const t = new Date(startLousaTime.getTime() + lousaEffectiveIndex * 30 * 60000); 
-                                                    displayTime = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); 
-                                                    isExpired = isTimeExpired(displayTime);
+                                                    displayContent = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}); 
+                                                    isExpired = isTimeExpired(displayContent);
+                                                    if (isExpired) timeClass = 'text-red-400 decoration-red-500 line-through';
                                                     lousaEffectiveIndex++; 
-                                                } 
+                                                }
                                                 
                                                 const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'lousa'; 
                                                 
@@ -3054,14 +3110,14 @@
                                                             <span className={`font-bold text-base truncate ${isRiscado || isExpired ? 'line-through' : ''} ${isExpired ? 'opacity-60' : ''}`}>{driver.name}</span> 
                                                         </div> 
                                                         <div className="flex items-center gap-1.5 flex-shrink-0"> 
-                                                            {!isRiscado && <span className={`font-mono font-bold text-lg mr-1 ${isExpired ? 'text-red-400 decoration-red-500 line-through' : 'text-yellow-400'}`}>{displayTime}</span>} 
+                                                            {/* Exibe o Conteúdo (Hora, RISCOU ou BAIXOU) */}
+                                                            <span className={`font-mono font-bold text-lg mr-1 ${timeClass}`}>{displayContent}</span> 
                                                             
                                                             <button onClick={() => handleLousaAction(item.uid, 'duplicate', vaga)} className="p-1.5 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 hide-on-print flex-shrink-0" title="Duplicar vaga para o final da fila"> <Icons.Plus size={10}/> </button> 
                                                             
-                                                            {/* AJUSTE: Botão de Riscar agora aparece SEMPRE, removida a verificação !isExpired */}
                                                             <button onClick={() => handleLousaAction(item.uid, 'riscar', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-white/10 text-white hide-on-print flex-shrink-0"> <div className={`${isRiscado ? 'text-red-500' : 'opacity-50'}`}> <Icons.Slash size={10}/> </div> </button> 
                                                             
-                                                            <button onClick={() => handleLousaAction(item.uid, 'baixar', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-white/10 text-white hide-on-print flex-shrink-0"><Icons.ArrowDown size={10}/></button> 
+                                                            <button onClick={() => handleLousaAction(item.uid, 'baixar', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-white/10 text-white hide-on-print flex-shrink-0" title="Baixar (Mover para o fim e marcar)"><Icons.ArrowDown size={10}/></button> 
                                                             <button onClick={() => handleLousaAction(item.uid, 'remove', vaga)} className="p-1.5 bg-white/5 rounded hover:bg-red-500/20 text-red-400 hide-on-print flex-shrink-0"><Icons.X size={12}/></button> 
                                                         </div> 
                                                     </div> 
