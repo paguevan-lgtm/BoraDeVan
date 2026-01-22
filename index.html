@@ -91,6 +91,40 @@
         .logo-bounce { animation: bounceLogo 1s var(--ease-elastic) infinite; }
         @keyframes bounceLogo { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
 
+        /* --- TOUR STYLES --- */
+        .tour-overlay {
+            position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(3px);
+            transition: all 0.5s ease;
+        }
+        /* Classe para limpar o fundo nos passos seguintes */
+        .tour-overlay.clear {
+            background: transparent;
+            backdrop-filter: none;
+            pointer-events: none; /* Permite interagir? Não, o spotlight bloqueia. Mantemos visual limpo. */
+        }
+
+        .tour-spotlight {
+            position: absolute;
+            border-radius: 12px;
+            /* O box-shadow gigante cria o efeito de escurecer o resto da tela sem precisar do overlay */
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 30px rgba(245, 158, 11, 0.5); 
+            border: 2px solid #f59e0b;
+            transition: all 0.4s var(--ease-out-expo);
+            pointer-events: none;
+            z-index: 10001;
+        }
+        .tour-tooltip {
+            position: absolute;
+            z-index: 10002;
+            width: 320px;
+            pointer-events: auto;
+            transition: all 0.4s var(--ease-out-expo);
+        }
+        /* Seta do Tooltip */
+        .tour-arrow { position: absolute; width: 16px; height: 16px; background: #1e293b; transform: rotate(45deg); z-index: -1; }
+
         /* AI Animations */
         .bg-ai { background: linear-gradient(135deg, #f59e0b, #d97706, #b45309); background-size: 200% 200%; animation: ai-pulse 3s ease infinite; }
         @keyframes ai-pulse { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
@@ -682,7 +716,7 @@
         };
 
         /* --- COMPONENTS --- */
-        const Button = ({ onClick, children, theme, variant='primary', icon:I, disabled, className='', size='md' }) => {
+        const Button = ({ onClick, children, theme, variant='primary', icon:I, disabled, className='', size='md', id='' }) => {
             const t = theme || THEMES.default;
             const sz = { sm:'px-3 py-2 text-sm', md:'px-4 py-3.5 text-base' };
             const v = {
@@ -692,7 +726,7 @@
                 success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 active:bg-emerald-500/20 premium-click`,
                 ai: `bg-ai text-white shadow-lg premium-click border-none`
             };
-            return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 ${t.radius} font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${v[variant]} ${sz[size]} ${className}`}>{I && <I size={size==='sm'?16:20} />} {children}</button>;
+            return <button id={id} onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 ${t.radius} font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${v[variant]} ${sz[size]} ${className}`}>{I && <I size={size==='sm'?16:20} />} {children}</button>;
         };
 
         const IconButton = ({ onClick, icon:I, variant='default', theme, disabled }) => {
@@ -798,6 +832,143 @@
                         </div>
                     ))}
                 </div>
+            );
+        };
+
+        /* --- TOUR COMPONENT --- */
+        const TourGuide = ({ steps, currentStep, onNext, onPrev, onClose, theme }) => {
+            const [targetRect, setTargetRect] = useState(null);
+            const [position, setPosition] = useState({ top: 0, left: 0 });
+            const [arrowPos, setArrowPos] = useState({});
+            
+            // Effect para calcular posição do destaque
+            useEffect(() => {
+                const step = steps[currentStep];
+                if (!step) return;
+
+                const updatePosition = () => {
+                    const target = document.querySelector(step.target);
+                    if (target) {
+                        const rect = target.getBoundingClientRect();
+                        setTargetRect({
+                            top: rect.top - 5,
+                            left: rect.left - 5,
+                            width: rect.width + 10,
+                            height: rect.height + 10
+                        });
+
+                        // Lógica de posicionamento Padrão
+                        let tooltipTop = rect.bottom + 20;
+                        let tooltipLeft = rect.left + (rect.width / 2) - 160; 
+                        let arrow = { top: -8, left: '50%', transform: 'translateX(-50%) rotate(45deg)' };
+
+                        // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
+                        if (step.placement === 'top') {
+                            tooltipTop = rect.top - 300; // Joga bem pra cima (altura estimada do card + margem)
+                            // Se o elemento for estreito, centraliza. Se for largo, ajusta.
+                            tooltipLeft = rect.left + (rect.width / 2) - 160;
+                            arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; // Seta pra baixo
+                        } else if (step.placement === 'right') {
+                            tooltipTop = rect.top; // Alinha com o topo do elemento
+                            tooltipLeft = rect.right + 20; // À direita
+                            arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' }; // Seta pra esquerda
+                        } else {
+                            // --- AUTO CORREÇÃO PARA BORDAS ---
+                            
+                            // Se for alto e na esquerda (Menu Geral) -> Joga pra direita
+                            if (rect.height > window.innerHeight * 0.7 && rect.left < window.innerWidth / 2) {
+                                tooltipTop = rect.top + 100;
+                                tooltipLeft = rect.right + 20;
+                                arrow = { left: -8, top: 20, transform: 'rotate(-45deg)' };
+                            }
+                            // Se estiver muito embaixo da tela -> Joga pra CIMA
+                            else if (tooltipTop + 250 > window.innerHeight) {
+                                tooltipTop = rect.top - 240; // Altura estimada
+                                arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
+                            }
+                        }
+
+                        // Ajustes finais de borda lateral (Mobile safe) para não vazar a tela
+                        if (tooltipLeft < 10) { 
+                            tooltipLeft = 10;
+                            if (arrow.left === '50%') arrow.left = (rect.left + rect.width/2) - 10 + 'px'; 
+                        }
+                        if (tooltipLeft + 320 > window.innerWidth) {
+                            tooltipLeft = window.innerWidth - 330;
+                            if (arrow.left === '50%') arrow.left = (rect.left - tooltipLeft) + rect.width/2 + 'px';
+                        }
+
+                        setPosition({ top: tooltipTop, left: tooltipLeft });
+                        setArrowPos(arrow);
+                        
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } else {
+                        // Se não achar o alvo (ex: passo 1), centraliza
+                        setTargetRect(null);
+                        setPosition({ top: window.innerHeight/2 - 100, left: window.innerWidth/2 - 160 });
+                        setArrowPos(null);
+                    }
+                };
+
+                setTimeout(updatePosition, 300);
+                window.addEventListener('resize', updatePosition);
+                return () => window.removeEventListener('resize', updatePosition);
+            }, [currentStep, steps]);
+
+            const step = steps[currentStep];
+            if (!step) return null;
+
+            return (
+                <>
+                    {/* Holofote (Só aparece se tiver alvo específico) */}
+                    {targetRect && (
+                        <div 
+                            className="tour-spotlight"
+                            style={{
+                                top: targetRect.top,
+                                left: targetRect.left,
+                                width: targetRect.width,
+                                height: targetRect.height
+                            }}
+                        />
+                    )}
+
+                    {/* Card do Tutorial */}
+                    <div 
+                        className={`tour-tooltip ${theme.card} p-6 rounded-2xl border ${theme.border} shadow-2xl flex flex-col gap-4`}
+                        style={{ top: position.top, left: position.left }}
+                    >
+                        {targetRect && <div className={`tour-arrow border-l border-t ${theme.border}`} style={arrowPos}></div>}
+                        
+                        <div className="flex justify-between items-start">
+                            <h3 className="font-bold text-xl text-amber-400">{step.title}</h3>
+                            <button onClick={onClose} className="opacity-50 hover:opacity-100 hover:text-red-400"><Icons.X size={20}/></button>
+                        </div>
+                        
+                        <p className="text-sm leading-relaxed opacity-90">{step.content}</p>
+                        
+                        <div className="flex items-center justify-between mt-2 pt-4 border-t border-white/10">
+                            <div className="text-xs font-bold opacity-50 uppercase tracking-widest">
+                                Passo {currentStep + 1} de {steps.length}
+                            </div>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={onPrev} 
+                                    disabled={currentStep === 0}
+                                    className="p-2 rounded-lg hover:bg-white/10 disabled:opacity-30 transition-colors"
+                                >
+                                    <Icons.ChevronLeft size={20}/>
+                                </button>
+                                <button 
+                                    onClick={onNext} 
+                                    className={`${theme.primary} px-4 py-2 rounded-lg text-sm font-bold shadow-lg active:scale-95 transition-transform flex items-center gap-2`}
+                                >
+                                    {currentStep === steps.length - 1 ? 'Concluir 🚀' : 'Próximo'} <Icons.ChevronRight size={16}/>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
             );
         };
 
@@ -955,6 +1126,10 @@
             
             const [draggedItem, setDraggedItem] = useState(null); 
 
+            // TOUR STATE
+            const [runTour, setRunTour] = useState(false);
+            const [tourStep, setTourStep] = useState(0);
+
             // HISTORY STATE
             const [historyDate, setHistoryDate] = useState(new Date());
             const [billingDate, setBillingDate] = useState(new Date());
@@ -977,6 +1152,91 @@
 
             // ESTADO PARA A ORDEM DO MENU (PERSONALIZÁVEL)
             const [orderedMenuItems, setOrderedMenuItems] = useState(DEFAULT_MENU_ITEMS);
+
+            // DEFINIÇÃO DOS PASSOS DO TOUR
+            const TOUR_STEPS = [
+                {
+                    title: "Bem-vindo ao Bora de Van! 🚐",
+                    content: "Prepare-se para transformar a gestão do seu transporte. Este tour rápido vai te mostrar os superpoderes do sistema em poucos segundos!",
+                    target: null
+                },
+                {
+                    title: "Menu Inteligente",
+                    content: "Aqui à esquerda você navega entre as áreas. Você pode segurar e arrastar os ícones para organizar a ordem como preferir!",
+                    target: "#sidebar-nav",
+                    placement: 'right'
+                },
+                {
+                    title: "Dashboard & Resumo",
+                    content: "Tenha uma visão geral imediata de quantos passageiros e viagens você tem hoje. Acompanhe gráficos de pagamento e bairros.",
+                    target: "#dashboard-stats"
+                },
+                {
+                    title: "Cadastro Mágico com IA ✨",
+                    content: "Não perca tempo digitando! Clique aqui, fale ou escreva algo como 'João vai pro Boqueirão as 18h' e nossa IA preenche tudo sozinha.",
+                    target: "#btn-magic-create",
+                    placement: 'top' // CORREÇÃO: Força o balão para CIMA para não tapar o botão
+                },
+                {
+                    title: "Agendamentos",
+                    content: "Visualize seu calendário mensal. Aqui ficam os passageiros que têm horário fixo mas ainda não foram alocados em viagens.",
+                    target: "#menu-btn-appointments",
+                    view: "appointments",
+                    placement: 'right'
+                },
+                {
+                    title: "Lista de Passageiros",
+                    content: "Seu banco de dados completo. Pesquise, edite, ligue ou veja detalhes expandindo o card. Use os filtros no topo para facilitar.",
+                    target: "#menu-btn-passengers",
+                    view: "passengers",
+                    placement: 'right'
+                },
+                {
+                    title: "Tabela SP e Lousa",
+                    content: "Gerencie a fila de motoristas. Na aba 'Geral' você vê a rodagem, em 'Confirmados' quem já tem horário, e na 'Lousa' a fila de espera.",
+                    target: "#menu-btn-table", 
+                    view: "table",
+                    placement: 'right'
+                },
+                {
+                    title: "Abas da Operação",
+                    content: "Deslize ou clique para alternar entre Tabela Geral, Confirmados, Lousa e Madrugada. Tudo sincronizado em tempo real.",
+                    target: "#table-tabs",
+                    placement: 'bottom'
+                },
+                {
+                    title: "Gestão de Viagens",
+                    content: "Aqui acontecem as viagens. Crie novas, finalize, cancele ou mande a lista para o motorista no WhatsApp com um clique.",
+                    target: "#menu-btn-trips",
+                    view: "trips",
+                    placement: 'right'
+                },
+                {
+                    title: "Histórico Completo",
+                    content: "Nesta aba você também acessa o histórico. Gere relatórios mensais completos em TXT clicando no botão 'Resumo'.",
+                    target: "#history-section",
+                    view: "trips"
+                },
+                {
+                    title: "Financeiro & Cobrança 💰",
+                    content: "Controle quem te deve! O sistema calcula R$ 4,00 por passageiro. Marque como Pago/Pendente e cobre no Zap.",
+                    target: "#menu-btn-billing",
+                    view: "billing",
+                    placement: 'right' // CORREÇÃO: Balão à direita para não sobrepor
+                },
+                {
+                    title: "Perdidos e Achados 📦",
+                    content: "Registre objetos esquecidos nas vans para manter o controle e devolver aos passageiros facilmente.",
+                    target: "#menu-btn-lostFound",
+                    view: "lostFound",
+                    placement: 'right'
+                },
+                {
+                    title: "Você está pronto! 🚀",
+                    content: "Isso é tudo por enquanto. Explore, clique e organize seu transporte. Se precisar rever este tour, vá em Configurações.",
+                    target: null
+                }
+            ];
 
             // STATE PARA SWIPE (GESTOS LATERAIS)
             const [swipeStart, setSwipeStart] = useState(null);
@@ -1438,6 +1698,13 @@
                     const savedTheme = localStorage.getItem(`${u}_nexflow_theme`) || 'default';
                     setThemeKey(savedTheme);
                     setPaxDeleteSessionCount(0);
+                    
+                    // VERIFICAÇÃO DO TOUR: Se nunca viu, inicia
+                    const tourSeen = localStorage.getItem(`tour_seen_${u}`);
+                    if (!tourSeen) {
+                        setTimeout(() => setRunTour(true), 1000); // Inicia após 1s de login
+                    }
+
                     await logAccess(u, 'Login Manual', coords);
                 } else {
                     // Fail safe se o mock do LoginScreen passar (não deve ocorrer com a lógica nova)
@@ -1447,6 +1714,8 @@
 
             const handleLogout = () => {
                 setUser(null);
+                setRunTour(false); // Reseta tour ao sair
+                setTourStep(0);
                 localStorage.removeItem('nexflow_session');
                 setPaxDeleteSessionCount(0);
                 setView('dashboard');
@@ -1726,6 +1995,38 @@
                 const [removed] = newList.splice(dragIndex, 1);
                 newList.splice(dropIndex, 0, removed);
                 db.ref('canned_messages_config/list').set(newList);
+            };
+
+            // CONTROLE DO TOUR
+            const handleNextStep = () => {
+                if (tourStep < TOUR_STEPS.length - 1) {
+                    const nextStep = TOUR_STEPS[tourStep + 1];
+                    setTourStep(prev => prev + 1);
+                    if (nextStep.view) setView(nextStep.view); // Troca de aba automaticamente
+                } else {
+                    handleCloseTour();
+                }
+            };
+
+            const handlePrevStep = () => {
+                if (tourStep > 0) {
+                    const prevStep = TOUR_STEPS[tourStep - 1];
+                    setTourStep(prev => prev - 1);
+                    if (prevStep.view) setView(prevStep.view);
+                }
+            };
+
+            const handleCloseTour = () => {
+                setRunTour(false);
+                setTourStep(0);
+                setView('dashboard'); // Volta pro inicio
+                if(user) localStorage.setItem(`tour_seen_${user.username}`, 'true');
+            };
+            
+            const restartTour = () => {
+                setTourStep(0);
+                setView('dashboard');
+                setRunTour(true);
             };
 
             // HANDLERS PARA DRAG AND DROP DO MENU
@@ -2313,7 +2614,7 @@
                     {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
                     
                     {/* MENU DESKTOP COM DRAG AND DROP */}
-                    <div className={`hidden md:flex w-64 flex-col border-r shrink-0 ${theme.border} ${theme.card}`}>
+                    <div id="sidebar-nav" className={`hidden md:flex w-64 flex-col border-r shrink-0 ${theme.border} ${theme.card}`}>
                         <div className={`h-20 flex items-center justify-center border-b ${theme.border}`}><h1 className="text-2xl font-bold">Bora de Van</h1></div>
                         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
                             {orderedMenuItems.map((x, index)=>(
@@ -2327,6 +2628,7 @@
                                     className={`draggable-item relative ${draggedItem?.index === index && draggedItem?.listType === 'menu' ? 'opacity-50 border border-dashed border-white/30 scale-95' : ''}`}
                                 >
                                     <button 
+                                        id={`menu-btn-${x.id}`} /* ID PARA O TOUR */
                                         onClick={()=>setView(x.id)} 
                                         className={`flex items-center gap-3 w-full p-3 rounded-lg transition-all ${view===x.id ? theme.primary : 'opacity-60 hover:opacity-100 hover:bg-white/5'}`}
                                     >
@@ -2336,7 +2638,7 @@
                                 </div>
                             ))}
                         </nav>
-                        <div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors`} onClick={() => setView('settings')}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div>
+                        <div id="menu-settings-btn" className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors`} onClick={() => setView('settings')}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div>
                     </div>
 
                     <div className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -2356,7 +2658,7 @@
                                     onTouchMove={onTouchMoveTable}
                                     onTouchEnd={onTouchEndTable}
                                 >
-                                    <div className="flex p-1 bg-black/20 rounded-xl border border-white/5 gap-1 overflow-x-auto">
+                                    <div id="table-tabs" className="flex p-1 bg-black/20 rounded-xl border border-white/5 gap-1 overflow-x-auto">
                                         <button onClick={()=>setTableTab('geral')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='geral' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Tabela</button>
                                         <button onClick={()=>setTableTab('confirmados')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='confirmados' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Confirmados</button>
                                         <button onClick={()=>setTableTab('lousa')} className={`flex-1 min-w-[100px] py-2 text-sm font-bold rounded-lg transition-all ${tableTab==='lousa' ? theme.primary : 'hover:bg-white/5 opacity-60'}`}>Lousa</button>
@@ -2506,6 +2808,15 @@
                                 <div className="space-y-6">
                                     <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex items-center gap-4 stagger-in d-1 premium-card`}> <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> </div> <div> <h3 className="text-xl font-bold">{user.username}</h3> <p className="opacity-60 text-sm capitalize">{user.role}</p> <button onClick={handleLogout} className="mt-2 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-1"><Icons.LogOut size={12}/> Sair da Conta</button> </div> </div>
                                     
+                                    {/* Botão de Reiniciar Tour */}
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card flex justify-between items-center`}>
+                                        <div>
+                                            <h3 className="font-bold text-lg">🎓 Tutorial</h3>
+                                            <p className="text-xs opacity-50">Reveja o tour guiado do sistema</p>
+                                        </div>
+                                        <button onClick={restartTour} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-bold text-sm">Iniciar Tour</button>
+                                    </div>
+
                                     <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card`}>
                                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Icons.Stars/> Configuração IA (Gemini)</h3>
                                         <div className="flex gap-2">
@@ -2536,7 +2847,7 @@
 
                             {view === 'dashboard' && (
                                 <div className="space-y-6">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div id="dashboard-stats" className="grid grid-cols-2 gap-4">
                                         <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-1 premium-card`}><div className={`mb-2 ${theme.accent}`}><Icons.Users size={24}/></div><div className="text-2xl font-bold">{data.passengers.length}</div><div className="text-xs opacity-70">Passageiros</div></div>
                                         <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card`}><div className={`mb-2 ${theme.accent}`}><Icons.Map size={24}/></div><div className="text-2xl font-bold">{data.trips.length}</div><div className="text-xs opacity-70">Viagens</div></div>
                                     </div>
@@ -2545,7 +2856,7 @@
                                         <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-4 premium-card`}><h3 className="font-bold mb-6 w-full">📍 Bairros</h3>{stats.b.length ? <HorizontalBarChart data={stats.b} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div>
                                     </div>
                                     <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" placeholder="Adicionar lembrete..." value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyPress={e=> e.key === 'Enter' && saveNote()} /><button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button></div><div className="space-y-2 max-h-40 overflow-y-auto pr-1">{data.notes.map(note => (<div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group"><span>{note.text}</span><button onClick={()=>del('notes', note.id)} className="opacity-50 hover:opacity-100 text-red-400"><Icons.Trash size={14}/></button></div>))}</div></div>
-                                    <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
+                                    <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button id="btn-magic-create" theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
                                 </div>
                             )}
 
@@ -2686,7 +2997,7 @@
 
                                     {/* --- ADVANCED HISTORY SECTION --- */}
                                     <div className="space-y-4 pt-6 border-t border-white/10">
-                                        <div className="flex items-center justify-between mb-2">
+                                        <div id="history-section" className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-sm font-bold opacity-50 uppercase tracking-widest pl-1">Histórico</h3>
                                                 <button 
@@ -2916,6 +3227,22 @@
                     )}
                     
                     {aiModal && ( <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className={`w-full max-w-lg ${theme.card} p-6 rounded-2xl page-transition`}><h3 className="text-xl font-bold mb-2 flex items-center gap-2"><Icons.Stars/> Cadastro Mágico</h3><p className="text-sm opacity-60 mb-4">Digite ou cole (ex: "Maria vai pro Boqueirão as 18h pagando Pix")</p><textarea className="w-full h-32 bg-black/20 p-4 rounded-xl border border-white/10 mb-4 text-base" value={aiInput} onChange={e=>setAiInput(e.target.value)} placeholder="Digite aqui..."></textarea><div className="flex justify-between items-center"><button onClick={toggleMic} className={`p-3 rounded-full ${isListening ? 'listening text-white' : 'bg-white/10 text-slate-400'}`}><Icons.Mic size={24}/></button><div className="flex gap-3"><Button themeKey={themeKey} variant="secondary" onClick={()=>setAiModal(false)}>Cancelar</Button><Button themeKey={themeKey} variant="primary" onClick={handleSmartCreate} disabled={aiLoading}>{aiLoading ? '...' : 'Criar'}</Button></div></div></div></div> )}
+                    
+                    {/* RENDERIZAÇÃO DO TOUR */}
+                    {runTour && (
+                        /* CORREÇÃO: Adicionada classe 'clear' se não for o primeiro passo */
+                        <div className={`tour-overlay ${tourStep > 0 ? 'clear' : ''}`}>
+                            <TourGuide 
+                                steps={TOUR_STEPS} 
+                                currentStep={tourStep} 
+                                onNext={handleNextStep} 
+                                onPrev={handlePrevStep} 
+                                onClose={handleCloseTour}
+                                theme={theme}
+                            />
+                        </div>
+                    )}
+
                     {renderContextMenu()}
                 </div>
             );
