@@ -851,11 +851,23 @@
                 setIsVisible(false); // Esconde ao mudar de passo
 
                 const findTarget = (retryCount = 0) => {
-                    const target = document.querySelector(step.target);
+                    // CORREÇÃO: Busca todos os elementos possíveis (Desktop e Mobile)
+                    // O seletor pode ser múltiplo ex: "#sidebar-nav, #mobile-sidebar"
+                    const targets = document.querySelectorAll(step.target);
+                    let target = null;
                     const isMobile = window.innerWidth < 768;
 
+                    // Encontra o primeiro elemento que está visível e tem tamanho
+                    for (let t of targets) {
+                        const r = t.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) {
+                            target = t;
+                            break;
+                        }
+                    }
+
                     // Verifica se o alvo existe e se está visível (largura > 0)
-                    if (target && target.getBoundingClientRect().width > 0) {
+                    if (target) {
                         const rect = target.getBoundingClientRect();
                         
                         // Ajuste para rolagem da página (rect é relativo à viewport, precisamos somar scrollY)
@@ -877,7 +889,7 @@
                         // --- LÓGICA MANUAL DE POSICIONAMENTO (placement) ---
                         if (step.placement === 'top') {
                             // CORREÇÃO IA: Aumentei o offset no mobile para subir mais o balão
-                            tooltipTop = rect.top + scrollTop - (isMobile ? 380 : 300); 
+                            tooltipTop = rect.top + scrollTop - (isMobile ? 280 : 240); // Altura estimada do card
                             tooltipLeft = rect.left + scrollLeft + (rect.width / 2) - 160;
                             arrow = { bottom: -8, left: '50%', transform: 'translateX(-50%) rotate(225deg)' }; 
                         } else if (step.placement === 'right' && !isMobile) {
@@ -892,7 +904,8 @@
                             // --- AUTO CORREÇÃO INTELIGENTE ---
                             if (rect.height > window.innerHeight * 0.7 && rect.left < window.innerWidth / 2) {
                                 if (isMobile) {
-                                    tooltipTop = scrollTop + 100; // Fixo no topo relativo
+                                    // Se for menu mobile, centraliza na tela
+                                    tooltipTop = scrollTop + 150; 
                                     tooltipLeft = window.innerWidth / 2 - 160;
                                     arrow = null; 
                                 } else {
@@ -934,8 +947,8 @@
 
                     } else {
                         // RETRY SYSTEM: Se não achou (ex: menu animando), tenta de novo em breve
-                        if (retryCount < 5) {
-                            setTimeout(() => findTarget(retryCount + 1), 200);
+                        if (retryCount < 8) { // Aumentei tentativas para dar tempo da animação do menu
+                            setTimeout(() => findTarget(retryCount + 1), 250);
                         } else {
                             // Fallback se falhar tudo
                             setTargetRect(null);
@@ -1201,20 +1214,22 @@
                 {
                     title: "Menu Inteligente",
                     content: "Aqui você navega entre as áreas. Segure e arraste os ícones para organizar a ordem como preferir!",
-                    target: "#sidebar-nav",
+                    // CORREÇÃO: Alvo duplo (Desktop OU Mobile)
+                    target: "#sidebar-nav, #mobile-sidebar", 
                     placement: 'right'
                 },
                 {
                     title: "Dashboard & Resumo",
                     content: "Tenha uma visão geral imediata de quantos passageiros e viagens você tem hoje. Acompanhe gráficos de pagamento e bairros.",
-                    target: "#dashboard-stats"
+                    target: "#dashboard-stats",
+                    placement: 'bottom' // Força para baixo para não cobrir
                 },
                 {
                     title: "Cadastro Mágico com IA ✨",
                     content: "Não perca tempo digitando! Clique aqui, fale ou escreva algo como 'João vai pro Boqueirão as 18h' e nossa IA preenche tudo sozinha.",
                     target: "#btn-magic-create",
-                    view: "dashboard", // GARANTIA: Força a view dashboard para o botão existir
-                    placement: 'top'
+                    view: "dashboard", 
+                    placement: 'top' // Força para cima
                 },
                 {
                     title: "Agendamentos",
@@ -1379,7 +1394,8 @@
                 
                 if (isMobile) {
                     // Verifica se o alvo é um item do menu ou a barra lateral
-                    const isMenuTarget = step.target && (step.target.startsWith('#menu-btn-') || step.target === '#sidebar-nav');
+                    // CORREÇÃO: Lógica para abrir menu se o alvo for o menu em si ou um botão dele
+                    const isMenuTarget = step.title === "Menu Inteligente" || (step.target && step.target.includes('menu-btn'));
                     
                     if (isMenuTarget) {
                         setMenuOpen(true);
@@ -2671,7 +2687,8 @@
 
             return (
                 <div className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}>
-                    {menuOpen && <div className="fixed inset-0 z-50 flex"><div className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} id={`menu-btn-${x.id}`} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
+                    {/* ADICIONADO ID 'mobile-sidebar' PARA O TOUR ENCONTRAR */}
+                    {menuOpen && <div className="fixed inset-0 z-50 flex"><div id="mobile-sidebar" className={`w-72 h-full shadow-2xl p-6 border-r flex flex-col ${theme.card} ${theme.border} relative`}><div className="flex justify-between items-center mb-8"><h1 className="text-2xl font-bold">Bora de Van</h1><button onClick={()=>setMenuOpen(false)}><Icons.Menu/></button></div><nav className="space-y-2 flex-1">{orderedMenuItems.map((x, i)=>(<button key={x.id} id={`menu-btn-${x.id}`} onClick={()=>{setView(x.id);setMenuOpen(false)}} className={`flex items-center gap-4 w-full p-4 rounded-xl text-lg font-medium transition-all ${view===x.id ? theme.primary : 'opacity-60'}`}><x.i size={24}/> {x.l}</button>))}</nav><div className={`p-4 border-t ${theme.border} flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors mt-auto`} onClick={() => { setView('settings'); setMenuOpen(false); }}> <div className="flex items-center gap-3"> <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" /> </div> <div className="flex flex-col"> <span className="text-sm font-bold">{user.username}</span> <span className="text-xs opacity-60 capitalize">{user.role}</span> </div> </div> </div></div><div className="flex-1 bg-black/60" onClick={()=>setMenuOpen(false)}></div></div>}
                     
                     {/* MENU DESKTOP COM DRAG AND DROP */}
                     <div id="sidebar-nav" className={`hidden md:flex w-64 flex-col border-r shrink-0 ${theme.border} ${theme.card}`}>
