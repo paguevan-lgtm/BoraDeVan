@@ -1290,6 +1290,9 @@
 
             const [selectedDate, setSelectedDate] = useState(getTodayDate());
             const [calendarDate, setCalendarDate] = useState(new Date());
+            
+            // NOVO: Estado para armazenar dados da madrugada do mês para cobrança
+            const [monthlyMadrugada, setMonthlyMadrugada] = useState({});
 
             const [modal, setModal] = useState(null); 
             const [aiModal, setAiModal] = useState(false);
@@ -1536,78 +1539,78 @@
                     }
                 }
             }, [tourStep, runTour]);
-
+            // --- WORKER DE ROTAÇÃO AUTOMÁTICA DA MADRUGADA (MULTI-DIAS & ROBUSTO) ---
             useEffect(() => {
-                 if (!db || !user || !isFireConnected) return; 
-                 const ref = db.ref(`user_data/${user.username}/notes`);
-                 const cb = ref.on('value', snap => {
-                     const val = snap.val();
-                     const list = val ? Object.keys(val).map(key => ({ id: key, ...val[key] })) : [];
-                     list.sort((a,b) => b.id - a.id);
-                     setData(prev => ({...prev, notes: list}));
-                 });
-                 
-                 const prefRef = db.ref(`user_data/${user.username}/preferences/theme`);
-                 prefRef.once('value', snap => {
-                     if(snap.exists()) setThemeKey(snap.val());
-                 });
+                if (!db || !isFireConnected || !currentOpDate) return;
 
-                 // CARREGA ORDEM DO MENU SALVA
-                 const menuOrderRef = db.ref(`user_data/${user.username}/preferences/menuOrder`);
-                 menuOrderRef.once('value', snap => {
-                     if(snap.exists()) {
-                         const savedOrder = snap.val(); // Array de IDs ex: ['drivers', 'dashboard']
-                         
-                         // Reordena a lista padrão baseada na lista salva
-                         const reordered = [...DEFAULT_MENU_ITEMS].sort((a, b) => {
-                             const idxA = savedOrder.indexOf(a.id);
-                             const idxB = savedOrder.indexOf(b.id);
-                             
-                             // Se o item não estiver salvo (novo recurso), joga pro final
-                             if (idxA === -1 && idxB === -1) return 0;
-                             if (idxA === -1) return 1;
-                             if (idxB === -1) return -1;
-                             
-                             return idxA - idxB;
-                         });
-                         setOrderedMenuItems(reordered);
-                     } else {
-                         // CORREÇÃO CRÍTICA: Se o usuário não tem preferência salva, RESETA para o padrão.
-                         // Isso evita que ele "herde" o menu bagunçado do usuário anterior que estava logado.
-                         setOrderedMenuItems(DEFAULT_MENU_ITEMS);
-                     }
-                 });
+                const checkAndRotateMadrugada = async () => {
+                    const statusRef = db.ref('madrugada_config/last_rotation_date');
+                    const listRef = db.ref('madrugada_config/list');
 
-                 return () => { ref.off('value', cb); }
-            }, [user, isFireConnected, DEFAULT_MENU_ITEMS]);
-            
-            useEffect(() => {
-                if (user && user.username === 'Breno' && db && isFireConnected) { 
-                    const timelineRef = db.ref('access_timeline').limitToLast(50);
-                    const labelsRef = db.ref('ip_labels');
-                    timelineRef.on('value', snap => {
-                        const val = snap.val();
-                        const list = val ? Object.keys(val).map(k => ({...val[k], id: k})).reverse() : [];
-                        setIpHistory(list);
-                    });
-                    labelsRef.on('value', snap => setIpLabels(snap.val() || {}));
-                    return () => { timelineRef.off(); labelsRef.off(); };
-                }
-            }, [user, isFireConnected]);
+                    try {
+                        const snap = await statusRef.once('value');
+                        const lastRotationStr = snap.val();
 
-            useEffect(() => {
-                const checkDate = () => {
-                    const newOpDate = getOperationalDate();
-                    if (newOpDate !== currentOpDate) {
-                        console.log("Virada de dia detectada (19:30+). Atualizando para:", newOpDate);
-                        setCurrentOpDate(newOpDate);
-                        setAnalysisDate(newOpDate); 
-                    }
+                        if (!lastRotationStr) {
+                            // Se nunca rodou, marca hoje como ponto de partida
+                            statusRef.set(currentOpDate);
+                            return;
+                        }
+
+                        const parseDate = (str) => {
+                            const [y, m, d] = str.split('-').map(Number);
+                            return new Date(y, m - 1, d); 
+                        };
+
+                        const lastDate = parseDate(lastRotationStr);
+                        const currDate = parseDate(currentOpDate);
+                        
+                        // CORREÇÃO: Math.round para evitar problemas de fuso/milissegundos
+                        const diffTime = currDate - lastDate;
+                        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                        if (diffDays > 0) {
+                            console.log(`🔄 Rotação Madrugada: ${diffDays} dias pendentes (${lastRotationStr} -> ${currentOpDate})`);
+                            
+                            await listRef.transaction((currentList) => {
+                                // CORREÇÃO: Tratamento robusto para lista nula ou objeto (Firebase quirk)
+                                let list = currentList;
+                                
+                                if (!list) list = ['05', '21', '18']; // Padrão se vazio
+                                else if (!Array.isArray(list) && typeof list === 'object') {
+                                    // Converte objeto {0: '...', 1: '...'} para array se necessário
+                                    list = Object.values(list);
+                                }
+
+                                if (Array.isArray(list) && list.length > 1) {
+                                    const effectiveRotations = diffDays % list.length;
+                                    if (effectiveRotations === 0) return list;
+                                    
+                                    const newList = [...list];
+                                    // Executa a rotação: O PRIMEIRO (índice 0) sai e vai para o FINAL
+                                    for (let i = 0; i < effectiveRotations; i++) {
+                                        const first = newList.shift();
+                                        newList.push(first);
+                                    }
+                                    return newList;
+                                }
+                                return list;
+                            }, (error, committed, snapshot) => {
+                                if (error) { 
+                                    console.error("Erro na rotação:", error); 
+                                } else if (committed) { 
+                                    // Só atualiza a data se a transação foi commitada com sucesso
+                                    statusRef.set(currentOpDate);
+                                    console.log("✅ Madrugada rotacionada e salva no banco!");
+                                }
+                            });
+                        }
+                    } catch (e) { console.error("Falha no worker da madrugada:", e); }
                 };
-                const interval = setInterval(checkDate, 60000); 
-                return () => clearInterval(interval);
-            }, [currentOpDate]);
-
+                checkAndRotateMadrugada();
+            }, [db, isFireConnected, currentOpDate]);
+            
+            // --- FIREBASE LISTENERS ---
             useEffect(() => {
                 if(!db || !isFireConnected) return; 
                 
@@ -2662,8 +2665,29 @@
             const confirmTrip = () => {
                 const driver = data.drivers.find(d => d.id === formData.driverId);
                 if (!driver) return alert("Selecione um motorista válido.");
+                
+                // CORREÇÃO: Preservar status original se for edição
+                let statusToSave = 'Em andamento';
+                
+                if (editingTripId) {
+                    const originalTrip = data.trips.find(t => t.id === editingTripId);
+                    if (originalTrip) {
+                        statusToSave = originalTrip.status;
+                    }
+                }
+
                 // Ao confirmar/editar, removemos a flag isTemp (isTemp: false ou null)
-                const pl = { id: editingTripId, driverId: driver.id, driverName: driver.name, time: suggestedTrip.time, passengerIds: suggestedTrip.passengers.map(p=>p.id), date: formData.date || getTodayDate(), status: 'Em andamento', isTemp: false };
+                const pl = { 
+                    id: editingTripId, 
+                    driverId: driver.id, 
+                    driverName: driver.name, 
+                    time: suggestedTrip.time, 
+                    passengerIds: suggestedTrip.passengers.map(p=>p.id), 
+                    date: formData.date || getTodayDate(), 
+                    status: statusToSave, 
+                    isTemp: false 
+                };
+                
                 dbOp(editingTripId?'update':'create', 'trips', pl); setModal(null); setSuggestedTrip(null);
             };
 
@@ -2733,15 +2757,29 @@
 
             // Ao atualizar status manualmente (Finalizar/Cancelar), também tornamos permanente (isTemp: false)
             // Se for CANCELAR uma temporária, deleta de vez.
+            // ATUALIZADO: Se Finalizar, limpa o horário dos passageiros.
             const updateTripStatus = (id, status) => { 
                 const trip = data.trips.find(t => t.id === id);
-                if (trip && trip.isTemp && status === 'Cancelada') {
+                if (!trip) return;
+
+                if (trip.isTemp && status === 'Cancelada') {
                     // Exclusão definitiva se for temporária e estiver sendo cancelada
                     db.ref('trips').child(id).remove();
                 } else {
-                    db.ref('trips').child(id).update({status, isTemp: false});
+                    const updates = { status, isTemp: false };
+                    
+                    // NOVO: Se finalizar a viagem, remove o horário do cadastro dos passageiros
+                    if (status === 'Finalizada' && trip.passengerIds && Array.isArray(trip.passengerIds)) {
+                        trip.passengerIds.forEach(pid => {
+                            // Atualiza apenas o campo 'time' para vazio
+                            db.ref(`passengers/${pid}`).update({ time: '' });
+                        });
+                    }
+
+                    db.ref('trips').child(id).update(updates);
                 }
             };
+
             const duplicateTrip = (t) => { if(!confirm('Duplicar esta viagem para hoje?')) return; dbOp('create', 'trips', { ...t, id: null, date: getTodayDate(), status: 'Ativo', isTemp: false }); };
 
             const stats = useMemo(() => {
@@ -2825,23 +2863,34 @@
             }, [historyTrips, historyDate, searchTerm, view]);
 
             // LOGICA DA ABA COBRANÇA (MOVED UP FOR REACT HOOK COMPLIANCE)
+            // NOVO EFFECT: Carrega dados da madrugada para o mês atual na aba de cobrança
+            useEffect(() => {
+                if (view !== 'billing' || !db) return;
+                
+                const year = billingDate.getFullYear();
+                const month = String(billingDate.getMonth() + 1).padStart(2, '0');
+                const startKey = `${year}-${month}-01`;
+                const endKey = `${year}-${month}-31`;
+
+                // Busca dados de daily_tables apenas para o intervalo do mês
+                db.ref('daily_tables').orderByKey().startAt(startKey).endAt(endKey).once('value', snapshot => {
+                    setMonthlyMadrugada(snapshot.val() || {});
+                });
+            }, [billingDate, view, db]);
+
             const billingData = useMemo(() => {
                 if (view !== 'billing') return { groups: [], summary: { pending: 0, paid: 0, total: 0 } };
 
                 const targetMonth = billingDate.getMonth();
                 const targetYear = billingDate.getFullYear();
 
-                // Filtra viagens válidas (não canceladas) E DO MÊS SELECIONADO
                 const validTrips = data.trips.filter(t => {
                     if (t.status === 'Cancelada') return false;
-                    
                     if (!t.date) return false;
                     const [y, m, d] = t.date.split('-').map(Number);
-                    // Compara mês e ano (m-1 pois getMonth é 0-indexado)
                     return (m - 1) === targetMonth && y === targetYear;
                 });
 
-                // Agrupamento
                 const groups = {};
                 let totalPending = 0;
                 let totalPaid = 0;
@@ -2850,33 +2899,67 @@
                     let value = 0;
                     let pCount = 0;
 
-                    // Lógica diferenciada para Cobrança Extra vs Viagem Normal
                     if (t.isExtra) {
                         value = parseFloat(t.value) || 0;
-                        pCount = 0; // Extras não contam pax para soma, valor é fixo
+                        pCount = 0; 
                     } else {
-                        // Calcula Passageiros
-                        pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
-                        value = pCount * 4; // Regra: Pax * 4
+                        // CORREÇÃO CRÍTICA: Priorizar o SNAPSHOT se existir.
+                        // Isso impede que edições no passageiro alterem valores de viagens passadas na cobrança.
+                        if (t.pCountSnapshot !== undefined) {
+                            pCount = parseInt(t.pCountSnapshot);
+                        } else {
+                            // Fallback apenas para viagens muito antigas sem snapshot
+                            pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                        }
+                        value = pCount * 4; 
                     }
 
                     const isPaid = t.paymentStatus === 'Pago';
-                    
-                    if (isPaid) totalPaid += value;
-                    else totalPending += value;
+                    if (isPaid) totalPaid += value; else totalPending += value;
 
-                    const dateKey = t.date; // YYYY-MM-DD
+                    const dateKey = t.date; 
                     if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 };
                     
-                    // Adiciona dados calculados ao objeto da viagem para exibição
                     groups[dateKey].trips.push({ ...t, pCount, value, isPaid });
                     groups[dateKey].totalValue += value;
                 });
 
-                // Transforma em array e ordena por data (mais recente primeiro)
+                Object.entries(monthlyMadrugada).forEach(([date, dayData]) => {
+                    if (!dayData.madrugada) return;
+                    const dailyDrivers = getRotatedList(date);
+                    
+                    Object.entries(dayData.madrugada).forEach(([vaga, mData]) => {
+                        if (mData.qtd && parseInt(mData.qtd) > 0) {
+                            const driver = dailyDrivers.find(d => d.vaga === vaga);
+                            const driverName = driver ? driver.name : `Vaga ${vaga}`;
+                            const fullDriver = data.drivers.find(d => d.name === driverName);
+                            const value = parseInt(mData.qtd) * 4; 
+                            const isPaid = mData.paid === true;
+
+                            if (isPaid) totalPaid += value; else totalPending += value;
+
+                            const dateKey = date;
+                            if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 };
+
+                            groups[dateKey].trips.push({
+                                id: `mad_${date}_${vaga}`, 
+                                isMadrugada: true,
+                                date: date,
+                                time: mData.time || 'Madrugada',
+                                driverName: driverName,
+                                driverId: fullDriver ? fullDriver.id : null,
+                                pCount: mData.qtd,
+                                value: value,
+                                isPaid: isPaid,
+                                vaga: vaga, 
+                                notes: mData.comment || ''
+                            });
+                            groups[dateKey].totalValue += value;
+                        }
+                    });
+                });
+
                 const sortedGroups = Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
-                
-                // Ordena viagens dentro dos grupos por horário
                 sortedGroups.forEach(g => {
                     g.trips.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
                 });
@@ -2885,21 +2968,19 @@
                     groups: sortedGroups, 
                     summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } 
                 };
-            // CORREÇÃO: Adicionado 'billingDate' aqui para forçar recalculo ao trocar o mês
-            }, [data.trips, data.passengers, view, billingDate]);
+            }, [data.trips, data.passengers, view, billingDate, monthlyMadrugada, data.drivers]);
 
             const toggleHistoryDay = (date) => {
                 setExpandedDays(prev => ({...prev, [date]: !prev[date]}));
             };
-
+            
+            // ... (Funções de navegação de data mantidas) ...
             const prevHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() - 1, 1));
             const nextHistoryMonth = () => setHistoryDate(new Date(historyDate.getFullYear(), historyDate.getMonth() + 1, 1));
-
-            // CONTROLES DE DATA DA COBRANÇA
             const prevBillingMonth = () => setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth() - 1, 1));
             const nextBillingMonth = () => setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1));
 
-            // Calendar
+            // ... (Calendar e RenderCalendar mantidos) ...
             const getDaysInMonth = (date) => {
                 const year = date.getFullYear(); const month = date.getMonth();
                 const days = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
@@ -2920,9 +3001,7 @@
             };
             const { monthName, dayElements } = renderCalendar();
 
-            // Menu Items (Removido daqui pois agora é State 'orderedMenuItems')
-            // const menuItems = ... 
-
+            // ... (renderContextMenu e LoginScreen check mantidos) ...
             const renderContextMenu = () => {
                 if (!contextMenu) return null;
                 const x = Math.min(contextMenu.x, window.innerWidth - 200);
@@ -2957,9 +3036,6 @@
 
             if (!user) return <LoginScreen onLogin={handleLogin} />;
 
-            // ATENÇÃO: Mudança crítica aqui!
-            // Usamos currentOpDate em vez de getTodayDate().
-            // Isso garante que a lista 'rodada' (ordem dos motoristas) respeite a virada das 19:30.
             const currentRotatedList = getRotatedList(currentOpDate);
             const analysisRotatedList = getRotatedList(analysisDate);
             
@@ -2968,15 +3044,35 @@
             let lousaEffectiveIndex = 0;
 
             const togglePaymentStatus = (trip) => {
-                const newStatus = trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago';
-                dbOp('update', 'trips', { id: trip.id, paymentStatus: newStatus });
+                if (trip.isMadrugada) {
+                    // Lógica para Madrugada: Atualiza daily_tables
+                    const newStatus = !trip.isPaid;
+                    db.ref(`daily_tables/${trip.date}/madrugada/${trip.vaga}`).update({ paid: newStatus });
+                    
+                    // Update otimista do estado local para refletir na UI instantaneamente
+                    setMonthlyMadrugada(prev => ({
+                        ...prev,
+                        [trip.date]: {
+                            ...prev[trip.date],
+                            madrugada: {
+                                ...prev[trip.date]?.madrugada,
+                                [trip.vaga]: {
+                                    ...prev[trip.date]?.madrugada[trip.vaga],
+                                    paid: newStatus
+                                }
+                            }
+                        }
+                    }));
+                } else {
+                    // Lógica para Viagens Normais/Extras
+                    const newStatus = trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago';
+                    dbOp('update', 'trips', { id: trip.id, paymentStatus: newStatus });
+                }
             };
 
             const sendBillingMessage = (trip) => {
-                // Lógica diferenciada para Carro Extra
                 if (trip.isExtra) {
                     if (!trip.extraPhone) return alert("Sem WhatsApp cadastrado para este extra.");
-                    
                     const statusStr = trip.paymentStatus === 'Pago' ? 'PAGO \u2705' : 'PENDENTE \u26A0\uFE0F';
                     const msg = `*Cobrança Adicional / Carro Extra*\n\n` +
                                 `*Data:* ${formatDisplayDate(trip.date)}\n` +
@@ -2984,31 +3080,44 @@
                                 `*Status:* *${statusStr}*\n` +
                                 `*Obs:* ${trip.notes || '-'}\n\n` +
                                 `_Controle Financeiro Bora de Van_`;
-                    
                     window.open(`https://wa.me/55${trip.extraPhone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
                     return;
                 }
 
+                // Busca motorista (funciona tanto para viagens normais quanto madrugada se o ID existir)
                 const dr = data.drivers.find(d => d.id === trip.driverId);
+                
+                // Se for madrugada e não achou motorista (ex: deletado), tenta buscar pelo nome
+                if (!dr && trip.isMadrugada) {
+                     return alert(`Motorista "${trip.driverName}" não encontrado no cadastro ativo.`);
+                }
+                
                 if (!dr || !dr.phone) return alert("Motorista sem telefone.");
                 
-                // Emojis em Unicode para máxima compatibilidade
-                // PAGO = ✅ (\u2705)
-                // PENDENTE = ⚠️ (\u26A0\uFE0F)
-                const statusStr = trip.paymentStatus === 'Pago' ? 'PAGO \u2705' : 'PENDENTE \u26A0\uFE0F';
-                
-                // Data atual para o cabeçalho "Debito em aberto"
+                const statusStr = trip.isPaid ? 'PAGO \u2705' : 'PENDENTE \u26A0\uFE0F';
                 const today = new Date().toLocaleDateString('pt-BR');
 
-                // Montagem da mensagem no formato exato solicitado
-                const msg = `*Debito em aberto* - ${today}\n\n` +
-                            `*RELATÓRIO DE VIAGEM - ${formatDisplayDate(trip.date)}*\n\n` +
-                            `• *ID:* #${trip.id}\n` +
-                            `• *Viagem:* ${trip.time}\n` +
-                            `• *Passageiros:* ${trip.pCount}\n` +
-                            `• *Valor Total:* *R$ ${trip.value},00*\n` +
-                            `• *Status:* *${statusStr}*\n\n` +
-                            `_Controle Financeiro Bora de Van_`;
+                let msg = '';
+                
+                if (trip.isMadrugada) {
+                    msg = `*Debito em aberto (Madrugada)* - ${today}\n\n` +
+                          `*RELATÓRIO MADRUGADA - ${formatDisplayDate(trip.date)}*\n\n` +
+                          `• *Vaga:* ${trip.vaga}\n` +
+                          `• *Horário:* ${trip.time}\n` +
+                          `• *Passageiros:* ${trip.pCount}\n` +
+                          `• *Valor:* *R$ ${trip.value},00*\n` +
+                          `• *Status:* *${statusStr}*\n\n` +
+                          `_Controle Financeiro Bora de Van_`;
+                } else {
+                    msg = `*Debito em aberto* - ${today}\n\n` +
+                          `*RELATÓRIO DE VIAGEM - ${formatDisplayDate(trip.date)}*\n\n` +
+                          `• *ID:* #${trip.id}\n` +
+                          `• *Viagem:* ${trip.time}\n` +
+                          `• *Passageiros:* ${trip.pCount}\n` +
+                          `• *Valor Total:* *R$ ${trip.value},00*\n` +
+                          `• *Status:* *${statusStr}*\n\n` +
+                          `_Controle Financeiro Bora de Van_`;
+                }
                 
                 window.open(`https://wa.me/55${dr.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
             };
@@ -3016,7 +3125,6 @@
             return (
                 <div 
                     className={`flex flex-col md:flex-row h-full w-full theme-transition ${theme.bg} ${theme.text} ${theme.font}`}
-                    // Adicionados os listeners globais de touch aqui
                     onTouchStart={handleGlobalTouchStart}
                     onTouchEnd={handleGlobalTouchEnd}
                 >
@@ -3368,7 +3476,37 @@
                                             })()}
                                         </div>
 
-                                        <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-blue-400">Em Viagem</h4>{assignedPax.length > 0 ? (assignedPax.map(p => (<div key={p.id} className={`${theme.card} ${theme.radius} border border-white/5 p-3 relative opacity-60 hover:opacity-100 transition-opacity`}><div className="flex justify-between items-center"><div><div className="font-bold">{p.name}</div><div className="text-xs opacity-70">{p.neighborhood} • {p.time}</div></div><div className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Em Viagem</div></div></div>))) : (<p className="text-sm opacity-40 italic pl-1">Nenhum.</p>)}</div>
+                                        {/* SEÇÃO EM VIAGEM ATUALIZADA */}
+                                        <div className="space-y-3 pt-4 border-t border-white/10">
+                                            <h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-blue-400">Em Viagem</h4>
+                                            {assignedPax.length > 0 ? (
+                                                assignedPax.map(p => {
+                                                    // Encontra a viagem ativa deste passageiro para verificar o status
+                                                    const trip = data.trips.find(t => t.date === selectedDate && t.status !== 'Cancelada' && (t.passengerIds||[]).map(String).includes(String(p.id)));
+                                                    const isFinalized = trip && trip.status === 'Finalizada';
+                                                    
+                                                    return (
+                                                        <div key={p.id} className={`${theme.card} ${theme.radius} border border-white/5 p-3 relative opacity-60 hover:opacity-100 transition-opacity`}>
+                                                            <div className="flex justify-between items-center">
+                                                                <div>
+                                                                    <div className="font-bold">{p.name}</div>
+                                                                    <div className="text-xs opacity-70">
+                                                                        {p.neighborhood} • {p.time || 'Sem horário'}
+                                                                    </div>
+                                                                </div>
+                                                                {/* Badge condicional: Em Viagem (Verde) ou Finalizada (Cinza) */}
+                                                                <div className={`text-xs px-2 py-1 rounded font-bold ${isFinalized ? 'bg-gray-500/20 text-gray-400' : 'bg-green-500/20 text-green-400'}`}>
+                                                                    {isFinalized ? 'Viagem Finalizada' : 'Em Viagem'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <p className="text-sm opacity-40 italic pl-1">Nenhum.</p>
+                                            )}
+                                        </div>
+
                                         <div className="space-y-3 pt-4 border-t border-white/10"><h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1">Viagens do Dia</h4>{tripsForSelectedDate.length > 0 ? (tripsForSelectedDate.map(t => { const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0); let statusColor = 'bg-blue-500'; if(t.status === 'Finalizada') statusColor = 'bg-green-500'; if(t.status === 'Cancelada') statusColor = 'bg-red-500'; return (<div key={t.id} className={`${theme.card} ${theme.radius} border ${theme.border} p-4 flex justify-between items-center relative overflow-hidden premium-card`}><div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColor}`}></div><div><div className="font-bold flex items-center gap-2">{t.driverName}<span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${statusColor.replace('bg-', 'border-').replace('500', '500/50')} ${statusColor.replace('bg-', 'text-').replace('500', '400')} bg-transparent`}>{t.status}</span></div><div className="text-xs opacity-70 flex gap-2 mt-1"><span>🕒 {calculateTimeSlot(t.time)}</span><span>👥 {pCount} pax</span></div></div><IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" /></div>); })) : (<p className="text-sm opacity-40 italic pl-1">Nenhuma viagem.</p>)}</div>
                                     </div>
                                 </div>
@@ -3376,7 +3514,7 @@
 
                             {view === 'passengers' && (
                                 <div className="space-y-3">
-                                    {filteredList.map((item, i) => (<div key={item.id} style={{animationDelay: `${i * 50}ms`}} onClick={() => setExpandedPax(expandedPax === item.id ? null : item.id)} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform stagger-in premium-card`}><div className="absolute top-1 right-8 text-4xl font-bold opacity-[0.07] pointer-events-none">#{item.id}</div><div className="absolute top-3 right-3 text-xs opacity-50">{expandedPax === item.id ? <Icons.ChevronUp size={18}/> : <Icons.ChevronDown size={18}/>}</div><div className="pr-8"><div className="flex flex-wrap gap-2 mb-1">{item.tags && item.tags.split(',').map((tag, i) => (<span key={i} className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase">{tag.trim()}</span>))}</div><h3 className="font-bold text-lg">{item.name}</h3><p className="text-sm opacity-70">{item.neighborhood}</p></div>{expandedPax === item.id && (<div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm expand-content anim-fade"><div className="grid grid-cols-2 gap-4"><div><span className="block opacity-50 text-xs">TELEFONE</span>{item.phone}</div><div><span className="block opacity-50 text-xs">PAGAMENTO</span>{item.payment}</div><div className="col-span-2"><span className="block opacity-50 text-xs">ENDEREÇO</span>{item.address} {item.reference ? `(${item.reference})` : ''}</div><div><span className="block opacity-50 text-xs">DATA/HORA</span>{formatDisplayDate(item.date)} - {item.time}</div><div><span className="block opacity-50 text-xs">DETALHES</span>{item.passengerCount} pax | {item.luggageCount || 0} malas</div><div><span className="block opacity-50 text-xs">STATUS</span><span className={item.status === 'Ativo' ? 'text-green-400' : 'text-red-400'}>{item.status}</span></div></div><div className="flex gap-2 pt-4 mt-2"><Button theme={theme} onClick={(e)=>{e.stopPropagation(); setFormData(item); setModal('passenger')}} variant="secondary" className="flex-1 py-2 text-sm" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="default" onClick={(e)=>{e.stopPropagation(); copyPassengerData(item)}} icon={Icons.Copy}/>{item.phone && <IconButton theme={theme} variant="success" onClick={(e)=>{e.stopPropagation(); callPhone(item.phone)}} icon={Icons.Phone}/>}<IconButton theme={theme} variant="danger" onClick={(e)=>{e.stopPropagation(); del(view, item.id)}} icon={Icons.Trash}/></div></div>)}</div>))}
+                                    {filteredList.map((item, i) => (<div key={item.id} style={{animationDelay: `${i * 50}ms`}} onClick={() => setExpandedPax(expandedPax === item.id ? null : item.id)} className={`${theme.card} p-4 ${theme.radius} border ${theme.border} relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform stagger-in premium-card`}><div className="absolute top-1 right-8 text-4xl font-bold opacity-[0.07] pointer-events-none">#{item.id}</div><div className="absolute top-3 right-3 text-xs opacity-50">{expandedPax === item.id ? <Icons.ChevronUp size={18}/> : <Icons.ChevronDown size={18}/>}</div><div className="pr-8"><div className="flex flex-wrap gap-2 mb-1">{item.tags && item.tags.split(',').map((tag, i) => (<span key={i} className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-bold uppercase">{tag.trim()}</span>))}</div><h3 className="font-bold text-lg">{item.name}</h3><p className="text-sm opacity-70">{item.neighborhood}</p></div>{expandedPax === item.id && (<div className="mt-4 pt-4 border-t border-white/10 space-y-2 text-sm expand-content anim-fade"><div className="grid grid-cols-2 gap-4"><div><span className="block opacity-50 text-xs">TELEFONE</span>{item.phone}</div><div><span className="block opacity-50 text-xs">PAGAMENTO</span>{item.payment}</div><div className="col-span-2"><span className="block opacity-50 text-xs">ENDEREÇO</span>{item.address} {item.reference ? `(${item.reference})` : ''}</div><div><span className="block opacity-50 text-xs">DATA/HORA</span>{formatDisplayDate(item.date)} - {item.time}</div><div><span className="block opacity-50 text-xs">DETALHES</span>{item.passengerCount} pax | {item.luggageCount || 0} malas</div><div><span className="block opacity-50 text-xs">STATUS</span><span className={item.status === 'Ativo' ? 'text-green-400' : 'text-red-400'}>{item.status}</span></div></div><div className="flex gap-2 pt-4 mt-2"><Button theme={theme} onClick={(e)=>{e.stopPropagation(); setFormData({...item, date: getTodayDate()}); setModal('passenger')}} variant="secondary" className="flex-1 py-2 text-sm" icon={Icons.Edit}>Editar</Button><IconButton theme={theme} variant="default" onClick={(e)=>{e.stopPropagation(); copyPassengerData(item)}} icon={Icons.Copy}/>{item.phone && <IconButton theme={theme} variant="success" onClick={(e)=>{e.stopPropagation(); callPhone(item.phone)}} icon={Icons.Phone}/>}<IconButton theme={theme} variant="danger" onClick={(e)=>{e.stopPropagation(); del(view, item.id)}} icon={Icons.Trash}/></div></div>)}</div>))}
                                     {!filteredList.length && <div className="text-center opacity-50 py-10">Nenhum passageiro.</div>}
                                 </div>
                             )}
@@ -3579,24 +3717,37 @@
                                                                 
                                                                 <div className="flex items-center gap-4 w-full md:w-auto">
                                                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg bg-white/5 border border-white/10 shrink-0`}>
-                                                                        {trip.isExtra ? <Icons.Car size={24}/> : trip.time.split(':')[0] + 'h'}
+                                                                        {/* Ícone condicional para Madrugada */}
+                                                                        {trip.isExtra ? <Icons.Car size={24}/> : (trip.isMadrugada ? <Icons.Moon size={24}/> : trip.time.split(':')[0] + 'h')}
                                                                     </div>
-                                                                    <div>
+                                                                    <div className="min-w-0 flex-1">
                                                                         {trip.isExtra ? (
                                                                             <>
-                                                                                <div className="font-bold text-lg flex items-center gap-2">
+                                                                                <div className="font-bold text-lg flex items-center gap-2 flex-wrap">
                                                                                     {trip.driverName}
-                                                                                    <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/30 uppercase">Extra</span>
+                                                                                    <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/30 uppercase shrink-0">Extra</span>
                                                                                 </div>
                                                                                 <div className="text-sm opacity-60 italic max-w-[200px] truncate">
                                                                                     {trip.notes || 'Sem observação'}
+                                                                                </div>
+                                                                            </>
+                                                                        ) : trip.isMadrugada ? (
+                                                                            <>
+                                                                                 <div className="font-bold text-lg flex items-center gap-2">
+                                                                                    {trip.driverName}
+                                                                                    <span className="text-[9px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-500/30 uppercase shrink-0">Madrugada</span>
+                                                                                </div>
+                                                                                <div className="text-sm opacity-60 flex items-center gap-2">
+                                                                                    <span>{trip.pCount} passageiros</span>
+                                                                                    <span>•</span>
+                                                                                    <span>Vaga {trip.vaga}</span>
                                                                                 </div>
                                                                             </>
                                                                         ) : (
                                                                             <>
                                                                                 <div className="font-bold text-lg flex items-center gap-2">
                                                                                     {trip.driverName}
-                                                                                    {trip.isTemp && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/30 uppercase">Temp</span>}
+                                                                                    {trip.isTemp && <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/30 uppercase shrink-0">Temp</span>}
                                                                                 </div>
                                                                                 <div className="text-sm opacity-60 flex items-center gap-2">
                                                                                     <span>{trip.pCount} passageiros</span>
@@ -3608,23 +3759,24 @@
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="flex items-center justify-between w-full md:w-auto gap-6 bg-black/20 p-2 md:p-0 md:bg-transparent rounded-lg">
-                                                                    <div className="flex flex-col items-end md:items-end px-3 md:px-0">
+                                                                {/* CORREÇÃO DE LAYOUT: Container com wrap para não cortar botões no mobile */}
+                                                                <div className="flex flex-wrap items-center justify-between w-full md:w-auto gap-3 md:gap-6 bg-black/20 p-3 md:p-0 md:bg-transparent rounded-lg">
+                                                                    <div className="flex flex-col items-start md:items-end px-1 md:px-0">
                                                                         <div className="text-xs opacity-50 uppercase font-bold">Valor</div>
-                                                                        <div className="text-xl font-bold text-yellow-400">R$ {trip.value},00</div>
+                                                                        <div className="text-xl font-bold text-yellow-400 whitespace-nowrap">R$ {trip.value},00</div>
                                                                     </div>
 
-                                                                    <div className="flex gap-2">
+                                                                    <div className="flex gap-2 items-center ml-auto md:ml-0">
                                                                         <button 
                                                                             onClick={() => togglePaymentStatus(trip)}
-                                                                            className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 border transition-all active:scale-95 ${trip.isPaid ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'}`}
+                                                                            className={`px-3 py-2 rounded-lg font-bold text-xs flex items-center gap-2 border transition-all active:scale-95 ${trip.isPaid ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'}`}
                                                                         >
                                                                             {trip.isPaid ? <Icons.CheckCircle size={14}/> : <Icons.Clock size={14}/>}
                                                                             {trip.isPaid ? 'PAGO' : 'PENDENTE'}
                                                                         </button>
                                                                         <button 
                                                                             onClick={() => sendBillingMessage(trip)}
-                                                                            className="px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg active:scale-95"
+                                                                            className="px-3 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg active:scale-95 flex-shrink-0"
                                                                             title="Cobrar no WhatsApp"
                                                                         >
                                                                             <Icons.Phone size={16}/>
@@ -3632,7 +3784,7 @@
                                                                         
                                                                         {/* Botão de Excluir apenas para Extras */}
                                                                         {trip.isExtra && (
-                                                                            <button onClick={() => del('trips', trip.id)} className="px-3 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                                                                            <button onClick={() => del('trips', trip.id)} className="px-3 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex-shrink-0">
                                                                                 <Icons.Trash size={16}/>
                                                                             </button>
                                                                         )}
