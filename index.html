@@ -2717,13 +2717,18 @@
             const getPaxIdx = (l) => l.sort((a,b) => (b.passengerCount - a.passengerCount) || (getBairroIdx(a.neighborhood) - getBairroIdx(b.neighborhood)));
 
             const simulate = () => {
-                const driver = data.drivers.find(d=>d.id==formData.driverId); const time = formData.time; const date = formData.date || getTodayDate(); 
+                const driver = data.drivers.find(d=>d.id==formData.driverId); 
+                const time = formData.time; 
+                const date = formData.date || getTodayDate(); 
+                
                 if(!driver || !time) return alert('Selecione Motorista e Horário');
                 
-                // CORREÇÃO:
-                // Como a viagem temporária JÁ ESTÁ com o horário ajustado (Ex: Slot 12:00 -> Viagem 13:00),
-                // buscamos passageiros EXATAMENTE para o horário da viagem (13:00), sem somar +60min novamente.
-                const targetPaxTime = time; 
+                // CORREÇÃO: Tratamento de horário para Madrugada (Intervalos)
+                // Se for "04:00/04:45", busca passageiros de "04:00"
+                let targetPaxTime = time;
+                if (formData.isMadrugada && time.includes('/')) {
+                    targetPaxTime = time.split('/')[0];
+                }
 
                 let pool = data.passengers.filter(p => p.status==='Ativo' && p.date === date && p.time === targetPaxTime && !isBusy(p.id, date, time) );
                 pool = getPaxIdx(pool);
@@ -2735,11 +2740,14 @@
 
             const autoFill = () => {
                 if(!suggestedTrip) return;
-                const tripDate = formData.date || suggestedTrip.date || getTodayDate(); const tripTime = formData.time || suggestedTrip.time;
+                const tripDate = formData.date || suggestedTrip.date || getTodayDate(); 
+                const tripTime = formData.time || suggestedTrip.time;
                 
-                // CORREÇÃO:
-                // Usa o horário da viagem diretamente.
-                const targetPaxTime = tripTime;
+                // CORREÇÃO: Tratamento de horário para Madrugada (Intervalos)
+                let targetPaxTime = tripTime;
+                if (formData.isMadrugada && tripTime.includes('/')) {
+                    targetPaxTime = tripTime.split('/')[0];
+                }
 
                 let pool = data.passengers.filter(p => p.status==='Ativo' && p.date === tripDate && p.time === targetPaxTime && !isBusy(p.id, tripDate, tripTime) && !suggestedTrip.passengers.find(x=>x.id===p.id));
                 pool = getPaxIdx(pool);
@@ -2750,11 +2758,12 @@
             };
 
             const addById = () => {
-                // CORREÇÃO: Verifica se há texto digitado antes de buscar
                 const term = searchId.toString().trim();
                 if (!term) return alert("Digite um ID ou Nome para adicionar.");
 
-                const tripDate = formData.date || suggestedTrip.date; const tripTime = formData.time || suggestedTrip.time;
+                const tripDate = formData.date || suggestedTrip.date; 
+                const tripTime = formData.time || suggestedTrip.time;
+                
                 const p = data.passengers.find(x => (x.id && x.id === term) || (x.name && x.name.toLowerCase().includes(term.toLowerCase())));
                 
                 if(!p) return alert('Não encontrado');
@@ -2783,7 +2792,6 @@
                 const driver = data.drivers.find(d => d.id === formData.driverId);
                 if (!driver) return alert("Selecione um motorista válido.");
                 
-                // CORREÇÃO: Preservar status original se for edição
                 let statusToSave = 'Em andamento';
                 let isTemp = false;
 
@@ -2795,8 +2803,6 @@
                     }
                 }
 
-                // CÁLCULO DO SNAPSHOT COMPLETO (DADOS + QUANTIDADE)
-                // Cria uma cópia isolada dos passageiros neste momento
                 const passengersSnapshot = suggestedTrip.passengers.map(p => ({
                     id: p.id,
                     name: p.name,
@@ -2807,22 +2813,48 @@
                 }));
 
                 const totalPaxSnapshot = passengersSnapshot.reduce((acc, p) => acc + p.passengerCount, 0);
+                const tripDate = formData.date || getTodayDate();
+                const tripTime = suggestedTrip.time; // O horário confirmado no modal
 
                 const pl = { 
-                    id: editingTripId, 
                     driverId: driver.id, 
                     driverName: driver.name, 
-                    time: suggestedTrip.time, 
+                    time: tripTime, 
                     passengerIds: suggestedTrip.passengers.map(p=>p.id), 
-                    date: formData.date || getTodayDate(), 
+                    date: tripDate, 
                     status: statusToSave, 
                     isTemp: isTemp,
-                    // Persiste os dados congelados
                     passengersSnapshot: passengersSnapshot,
                     pCountSnapshot: totalPaxSnapshot
                 };
+
+                // LÓGICA ESPECÍFICA PARA MADRUGADA
+                if (formData.isMadrugada) {
+                    const spDriver = spList.find(s => s.name === driver.name);
+                    if (!spDriver) return alert("Erro: Motorista não vinculado a uma vaga na tabela.");
+                    
+                    const vaga = spDriver.vaga;
+                    const tripId = `mad_${tripDate}_${vaga}`;
+                    
+                    pl.id = tripId;
+                    pl.isMadrugada = true;
+                    pl.pCount = totalPaxSnapshot; 
+                    
+                    // 1. Salva a viagem na coleção trips
+                    db.ref(`trips/${tripId}`).update(pl);
+
+                    // 2. Atualiza a Tabela da Madrugada (GARANTE O HORÁRIO IGUAL)
+                    // Como a tabela é read-only, esta é a única forma de alterar esses dados
+                    db.ref(`daily_tables/${tripDate}/madrugada/${vaga}`).update({
+                        qtd: totalPaxSnapshot,
+                        time: tripTime // Sincroniza o horário escolhido
+                    });
+
+                } else {
+                    pl.id = editingTripId; 
+                    dbOp(editingTripId ? 'update' : 'create', 'trips', pl); 
+                }
                 
-                dbOp(editingTripId ? 'update' : 'create', 'trips', pl); 
                 setModal(null); 
                 setSuggestedTrip(null);
             };
@@ -2830,8 +2862,6 @@
             const openEditTrip = (t) => {
                 const dr = data.drivers.find(d=>d.id===t.driverId); 
                 
-                // Ao editar, tentamos carregar do snapshot primeiro para manter fidelidade, 
-                // caso contrário busca do banco de dados atual
                 let pax = [];
                 if (t.passengersSnapshot) {
                     pax = t.passengersSnapshot;
@@ -2841,10 +2871,43 @@
 
                 const occ = pax.reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
                 
-                setFormData({driverId:t.driverId, time:t.time, date: t.date}); 
+                setFormData({
+                    driverId: t.driverId, 
+                    time: t.time, 
+                    date: t.date,
+                    isMadrugada: !!t.isMadrugada 
+                }); 
                 setEditingTripId(t.id);
                 setSuggestedTrip({ driver:dr || {name: 'Desconhecido', capacity: 0}, time:t.time, passengers:pax, occupancy:occ, date: t.date });
                 setModal('trip');
+            };
+            
+            // Função auxiliar para abrir o modal de viagem preenchido para Madrugada (vinda da tabela)
+            const openMadrugadaTrip = (vaga) => {
+                const driverSp = spList.find(d => d.vaga === vaga);
+                if (!driverSp) return;
+                const driverDb = data.drivers.find(d => d.name === driverSp.name);
+                
+                if (!driverDb) return alert("Motorista desta vaga não cadastrado no sistema.");
+
+                const tripId = `mad_${currentOpDate}_${vaga}`;
+                const existingTrip = data.trips.find(t => t.id === tripId);
+
+                if (existingTrip) {
+                    openEditTrip(existingTrip);
+                } else {
+                    // Nova viagem de madrugada - Abre no FORMULÁRIO para escolher horário
+                    setFormData({
+                        driverId: driverDb.id,
+                        date: currentOpDate,
+                        time: '04:00', // Horário padrão sugestivo
+                        isMadrugada: true
+                    });
+                    // Deixa null para forçar a tela de seleção de horário/rota
+                    setSuggestedTrip(null); 
+                    setEditingTripId(null);
+                    setModal('trip');
+                }
             };
 
             const handleCreateTripFromPax = (p) => {
@@ -3476,20 +3539,30 @@
                                     )}
                                     {tableTab === 'madrugada' && (
                                         <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} anim-fade overflow-hidden`}>
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0"><h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3><div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto"><button onClick={addMadrugadaVaga} className="bg-green-600/20 text-green-400 border border-green-500/30 px-3 py-1 rounded text-xs font-bold hover:bg-green-600/30 whitespace-nowrap">Adicionar Vaga</button><div className="flex items-center gap-2"><span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span><button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: currentOpDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
+                                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0">
+                                                <h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3>
+                                                <div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto">
+                                                    {/* BOTÃO ATUALIZADO: Adicionar Motorista */}
+                                                    <Button theme={theme} onClick={addMadrugadaVaga} icon={Icons.Plus} size="sm" variant="success">Adicionar Motorista</Button>
+                                                    
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span>
+                                                        <button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: currentOpDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className="text-xs opacity-50 mb-3 hide-on-print">Os dados abaixo são reflexo das viagens criadas.</p>
                                             <div id="print-madrugada-list" className="space-y-2">
                                                 {madrugadaList.map((vaga, index) => { 
                                                     const driver = spList.find(d => d.vaga === vaga) || { name: 'Desconhecido' }; 
                                                     const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; 
                                                     const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; 
                                                     
-                                                    // VERIFICAÇÃO DE STATUS DA VIAGEM
                                                     const tripId = `mad_${currentOpDate}_${vaga}`;
                                                     const trip = data.trips.find(t => t.id === tripId);
                                                     const isCancelled = trip && trip.status === 'Cancelada';
                                                     const isFinished = trip && trip.status === 'Finalizada';
                                                     
-                                                    // Estilo base
                                                     let rowClass = `flex flex-col md:flex-row items-center gap-2 p-3 rounded-lg border draggable-item cursor-grab active:cursor-grabbing`;
                                                     if (isCancelled) rowClass += ` bg-red-900/10 border-red-500/30 opacity-70`;
                                                     else if (isFinished) rowClass += ` bg-green-900/10 border-green-500/30`;
@@ -3513,25 +3586,23 @@
                                                             </div> 
                                                             {!mData.riscado && ( 
                                                                 <div className="flex items-center gap-2 w-full md:w-auto md:justify-end flex-shrink-0 mt-2 md:mt-0"> 
-                                                                    <div className="flex gap-2 hide-on-print w-full md:w-auto"> 
-                                                                        <input 
-                                                                            type="number" 
-                                                                            placeholder="Qtd" 
-                                                                            className={`bg-black/30 border ${isCancelled ? 'border-red-500/30 text-red-300' : 'border-white/10'} rounded px-3 py-2 w-full md:w-20 text-center outline-none focus:border-indigo-500 transition-colors`} 
-                                                                            value={mData.qtd} 
-                                                                            onChange={(e) => handleMadrugadaChange(vaga, 'qtd', e.target.value)} 
-                                                                        /> 
-                                                                        <select 
-                                                                            className={`bg-black/30 border ${isCancelled ? 'border-red-500/30 text-red-300' : 'border-white/10'} rounded px-3 py-2 w-full md:w-32 outline-none focus:border-indigo-500 transition-colors`} 
-                                                                            value={mData.time} 
-                                                                            onChange={(e) => handleMadrugadaChange(vaga, 'time', e.target.value)} 
-                                                                        > 
-                                                                            <option value="">Horário</option> 
-                                                                            <option value="4:00/4:45">04:00/45</option> 
-                                                                            <option value="5:00/5:45">05:00/45</option> 
-                                                                            <option value="6:00/6:45">06:00/45</option> 
-                                                                        </select> 
-                                                                    </div> 
+                                                                    <div className="flex gap-2 hide-on-print w-full md:w-auto items-center">
+                                                                        {/* Campos READ-ONLY (Divs). Edição feita pelo botão Gerenciar */}
+                                                                        <div className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-20 text-center text-white/70">
+                                                                            {mData.qtd || '-'}
+                                                                        </div>
+                                                                        <div className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-32 text-center text-white/70 text-sm">
+                                                                            {mData.time || '-'}
+                                                                        </div>
+                                                                        
+                                                                        <button 
+                                                                            onClick={() => openMadrugadaTrip(vaga)}
+                                                                            className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/40 rounded-lg transition-colors font-bold text-xs flex items-center gap-1"
+                                                                            title="Editar Viagem"
+                                                                        >
+                                                                            <Icons.Edit size={14}/> Gerenciar
+                                                                        </button>
+                                                                    </div>
                                                                     <div className="show-on-print hidden font-bold text-indigo-200 text-lg"> 
                                                                         <span>{mData.time}</span> 
                                                                         {mData.qtd && <span className="ml-2 opacity-70">({mData.qtd})</span>} 
@@ -4168,7 +4239,7 @@
                                             
                                             <div className="py-2">
                                                 <Input 
-                                                    themeKey={themeKey} 
+                                                    theme={theme} 
                                                     label="Novo Horário" 
                                                     type="time" 
                                                     value={formData.time || ''} 
@@ -4178,9 +4249,9 @@
                                             </div>
 
                                             <div className="pt-2 grid grid-cols-2 gap-3">
-                                                <Button themeKey={themeKey} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button>
+                                                <Button theme={theme} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button>
                                                 <Button 
-                                                    themeKey={themeKey} 
+                                                    theme={theme} 
                                                     onClick={() => {
                                                         if(!formData.time) return alert("Por favor, defina um horário.");
                                                         dbOp('update', 'passengers', { id: formData.id, time: formData.time });
@@ -4197,10 +4268,10 @@
                                     {modal === 'madrugadaVaga' && (
                                         <div className="space-y-6">
                                             <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm text-yellow-200">
-                                                Digite o número da vaga que deseja adicionar à lista da Madrugada de hoje/amanhã.
+                                                Digite o número da vaga do motorista para adicionar à tabela da Madrugada.
                                             </div>
                                             <Input 
-                                                themeKey={themeKey} 
+                                                theme={theme} 
                                                 label="Número da Vaga" 
                                                 value={tempVagaMadrugada} 
                                                 onChange={e => setTempVagaMadrugada(e.target.value)} 
@@ -4208,30 +4279,94 @@
                                                 autoFocus
                                             />
                                             <div className="pt-4">
-                                                <Button themeKey={themeKey} onClick={confirmAddMadrugadaVaga} icon={Icons.Check}>Adicionar Vaga</Button>
+                                                <Button theme={theme} onClick={confirmAddMadrugadaVaga} icon={Icons.Check}>Confirmar Adição</Button>
                                             </div>
                                         </div>
                                     )}
                                     {modal === 'madrugadaBlock' && (
-                                        <div className="space-y-6">
-                                            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-200">
-                                                Justifique o por que riscou a vaga <span className="font-bold font-mono">{vagaToBlock}</span> na Madrugada.
-                                            </div>
-                                            <Input 
-                                                themeKey={themeKey} 
-                                                label="Motivo (Opcional)" 
-                                                value={tempJustification} 
-                                                onChange={e => setTempJustification(e.target.value)} 
-                                                placeholder="Ex: Quebrou, Médico, Folga..."
-                                                autoFocus
-                                            />
-                                            <div className="pt-4 grid grid-cols-2 gap-3">
-                                                <Button themeKey={themeKey} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button>
-                                                <Button themeKey={themeKey} onClick={confirmMadrugadaBlock} icon={Icons.Check} variant="danger">Bloquear</Button>
-                                            </div>
-                                        </div>
+                                        <div className="space-y-6"><div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-200">Justifique o por que riscou a vaga <span className="font-bold font-mono">{vagaToBlock}</span> na Madrugada.</div><Input theme={theme} label="Motivo (Opcional)" value={tempJustification} onChange={e => setTempJustification(e.target.value)} placeholder="Ex: Quebrou, Médico, Folga..." autoFocus /><div className="pt-4 grid grid-cols-2 gap-3"><Button theme={theme} variant="secondary" onClick={()=>setModal(null)}>Cancelar</Button><Button theme={theme} onClick={confirmMadrugadaBlock} icon={Icons.Check} variant="danger">Bloquear</Button></div></div>
                                     )}
-                                    {modal === 'trip' && ( <>{!suggestedTrip ? ( <div className="space-y-6"><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Motorista</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.driverId||''} onChange={e=>setFormData({...formData, driverId:e.target.value})}><option value="" className="bg-slate-900">Selecione...</option>{data.drivers.filter(d=>d.status==='Ativo').map(d=><option key={d.id} value={d.id} className="bg-slate-900">{d.name} ({d.capacity} lug)</option>)}</select></div><Input themeKey={themeKey} label="Horário (ex: 17:30)" type="time" value={formData.time||''} onChange={e=>setFormData({...formData, time:e.target.value})} /><div className="text-center font-bold opacity-80">{calculateTimeSlot(formatTime(formData.time||''))}</div><Button themeKey={themeKey} onClick={simulate} icon={Icons.Zap}>Gerar Rota</Button></div> ) : ( <div className="flex flex-col h-full"><div className="bg-black/10 p-5 rounded-xl border border-white/10 flex-1 flex flex-col"><div className="flex flex-col gap-1 mb-4"><label className="text-xs font-bold opacity-60">Motorista</label><select className="bg-black/20 border border-white/10 text-white rounded-xl px-3 py-2 w-full" value={formData.driverId} onChange={(e) => { const dr = data.drivers.find(d => d.id === e.target.value); setFormData({...formData, driverId: e.target.value}); setSuggestedTrip({...suggestedTrip, driver: dr || {name:'Selecione', capacity:0}}); }}><option value="" className="bg-slate-900">Selecione...</option>{data.drivers.filter(d => d.status === 'Ativo').map(d => (<option key={d.id} value={d.id} className="bg-slate-900">{d.name} ({d.capacity} lug)</option>))}</select></div><div className="flex justify-between items-center mb-4"><span className="font-bold text-lg">{suggestedTrip.driver.name}</span><span className={`text-sm px-3 py-1 rounded-full font-bold ${suggestedTrip.occupancy > suggestedTrip.driver.capacity ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{suggestedTrip.occupancy} / {suggestedTrip.driver.capacity}</span></div><div className="flex gap-2 mb-4"><input className="bg-black/20 border border-white/10 rounded-xl px-4 flex-1 h-12" placeholder="ID Passageiro" value={searchId} onChange={e=>setSearchId(e.target.value)} /><button onClick={addById} className="bg-white/10 px-4 rounded-xl font-bold h-12">Add</button></div><button onClick={autoFill} className={`w-full mb-4 py-3 bg-white/5 border border-white/10 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-white/10 anim-fade ${theme.accent}`}><Icons.Refresh size={20}/> 🤖 Puxar Passageiros (Auto)</button><div className="space-y-3 overflow-y-auto flex-1 pr-1 scroll-y max-h-[35vh]">{suggestedTrip.passengers.map((p, i) => (<div key={p.id} className={`${theme.bg} p-3 rounded-xl border ${theme.border} flex justify-between items-center shadow-sm`}><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${theme.primary}`}>{i+1}</div><div><div className="text-base font-bold">{p.name}</div><div className="text-xs opacity-60">{p.neighborhood}</div></div></div><div className="flex items-center gap-3"><span className={`${theme.accent} font-bold text-base`}>{p.passengerCount}p</span><button onClick={()=>removePax(p.id)} className="text-red-400 p-2"><Icons.Trash size={20}/></button></div></div>))}</div></div><div className="grid grid-cols-2 gap-3 pt-4"><Button themeKey={themeKey} variant="secondary" onClick={()=>setSuggestedTrip(null)}>Voltar</Button><Button themeKey={themeKey} onClick={confirmTrip} variant="success">Confirmar</Button></div></div> )}</> )}
+
+                                    {/* MODAL VIAGEM ATUALIZADO */}
+                                    {modal === 'trip' && ( 
+                                        <>
+                                            {!suggestedTrip ? ( 
+                                                <div className="space-y-6">
+                                                    {/* CHECKBOX PARA VIAGEM MADRUGADA */}
+                                                    <div 
+                                                        className={`p-4 rounded-xl flex items-center gap-3 cursor-pointer transition-colors border ${formData.isMadrugada ? 'bg-indigo-500/20 border-indigo-500' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                                        onClick={() => setFormData(prev => ({...prev, isMadrugada: !prev.isMadrugada, driverId: ''}))}
+                                                    >
+                                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${formData.isMadrugada ? 'bg-indigo-500 border-indigo-500' : 'border-white/30'}`}>
+                                                            {formData.isMadrugada && <Icons.Check size={14} className="text-white"/>}
+                                                        </div>
+                                                        <div>
+                                                            <div className={`font-bold text-sm ${formData.isMadrugada ? 'text-indigo-300' : 'text-white'}`}>Viagem da Madrugada</div>
+                                                            <div className="text-xs opacity-50">Filtra motoristas da tabela de madrugada</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <label className="text-xs font-bold opacity-60 ml-1">Motorista</label>
+                                                        <select 
+                                                            className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" 
+                                                            value={formData.driverId||''} 
+                                                            onChange={e=>setFormData({...formData, driverId:e.target.value})}
+                                                        >
+                                                            <option value="" className="bg-slate-900">Selecione...</option>
+                                                            {data.drivers
+                                                                .filter(d => {
+                                                                    // FILTRO DE MOTORISTAS DA MADRUGADA
+                                                                    if (formData.isMadrugada) {
+                                                                        // CORREÇÃO: Comparação insensível a maiúsculas/minúsculas
+                                                                        const sp = spList.find(s => s.name.toLowerCase() === d.name.toLowerCase());
+                                                                        return sp && madrugadaList.includes(sp.vaga);
+                                                                    }
+                                                                    return d.status==='Ativo';
+                                                                })
+                                                                .map(d => {
+                                                                    let label = `${d.name} (${d.capacity} lug)`;
+                                                                    if (formData.isMadrugada) {
+                                                                        const sp = spList.find(s => s.name.toLowerCase() === d.name.toLowerCase());
+                                                                        if (sp) label = `[Vaga ${sp.vaga}] ${label}`;
+                                                                    }
+                                                                    return <option key={d.id} value={d.id} className="bg-slate-900">{label}</option>;
+                                                                })
+                                                            }
+                                                        </select>
+                                                        {formData.isMadrugada && data.drivers.filter(d => { const sp = spList.find(s => s.name.toLowerCase() === d.name.toLowerCase()); return sp && madrugadaList.includes(sp.vaga); }).length === 0 && (
+                                                            <p className="text-xs text-red-400 mt-1 pl-1">Nenhum motorista encontrado na escala da madrugada.</p>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* SELEÇÃO DE HORÁRIO (Com sugestões para madrugada) */}
+                                                    {formData.isMadrugada ? (
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <label className="text-xs font-bold opacity-60 ml-1">Horário</label>
+                                                            <select 
+                                                                className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14"
+                                                                value={formData.time || ''}
+                                                                onChange={e=>setFormData({...formData, time:e.target.value})}
+                                                            >
+                                                                <option value="" className="bg-slate-900">Selecione...</option>
+                                                                <option value="04:00/04:45" className="bg-slate-900">04:00/45</option>
+                                                                <option value="05:00/05:45" className="bg-slate-900">05:00/45</option>
+                                                                <option value="06:00/06:45" className="bg-slate-900">06:00/45</option>
+                                                            </select>
+                                                        </div>
+                                                    ) : (
+                                                        <Input themeKey={themeKey} label="Horário (ex: 17:30)" type="time" value={formData.time||''} onChange={e=>setFormData({...formData, time:e.target.value})} />
+                                                    )}
+
+                                                    {!formData.isMadrugada && <div className="text-center font-bold opacity-80">{calculateTimeSlot(formatTime(formData.time||''))}</div>}
+                                                    
+                                                    <Button themeKey={themeKey} onClick={simulate} icon={Icons.Zap}>Gerar Rota</Button>
+                                                </div> 
+                                            ) : ( 
+                                                <div className="flex flex-col h-full"><div className="bg-black/10 p-5 rounded-xl border border-white/10 flex-1 flex flex-col"><div className="flex flex-col gap-1 mb-4"><label className="text-xs font-bold opacity-60">Motorista</label><div className="bg-black/20 border border-white/10 text-white rounded-xl px-3 py-2 w-full font-bold opacity-70">{suggestedTrip.driver.name}</div></div><div className="flex justify-between items-center mb-4"><span className="font-bold text-lg">Resumo</span><span className={`text-sm px-3 py-1 rounded-full font-bold ${suggestedTrip.occupancy > suggestedTrip.driver.capacity ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{suggestedTrip.occupancy} / {suggestedTrip.driver.capacity}</span></div><div className="flex gap-2 mb-4"><input className="bg-black/20 border border-white/10 rounded-xl px-4 flex-1 h-12" placeholder="ID Passageiro" value={searchId} onChange={e=>setSearchId(e.target.value)} /><button onClick={addById} className="bg-white/10 px-4 rounded-xl font-bold h-12">Add</button></div><button onClick={autoFill} className={`w-full mb-4 py-3 bg-white/5 border border-white/10 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-white/10 anim-fade ${theme.accent}`}><Icons.Refresh size={20}/> 🤖 Puxar Passageiros (Auto)</button><div className="space-y-3 overflow-y-auto flex-1 pr-1 scroll-y max-h-[35vh]">{suggestedTrip.passengers.map((p, i) => (<div key={p.id} className={`${theme.bg} p-3 rounded-xl border ${theme.border} flex justify-between items-center shadow-sm`}><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${theme.primary}`}>{i+1}</div><div><div className="text-base font-bold">{p.name}</div><div className="text-xs opacity-60">{p.neighborhood}</div></div></div><div className="flex items-center gap-3"><span className={`${theme.accent} font-bold text-base`}>{p.passengerCount}p</span><button onClick={()=>removePax(p.id)} className="text-red-400 p-2"><Icons.Trash size={20}/></button></div></div>))}</div></div><div className="grid grid-cols-2 gap-3 pt-4"><Button themeKey={themeKey} variant="secondary" onClick={()=>setSuggestedTrip(null)}>Voltar</Button><Button themeKey={themeKey} onClick={confirmTrip} variant="success">Confirmar</Button></div></div> 
+                                            )}
+                                        </> 
+                                    )}
                                     {modal === 'lostFound' && ( <><Input themeKey={themeKey} label="O que foi encontrado?" value={formData.description||''} onChange={e=>setFormData({...formData, description:e.target.value})} placeholder="Ex: Guarda-chuva preto" /><Input themeKey={themeKey} label="Local / Veículo" value={formData.location||''} onChange={e=>setFormData({...formData, location:e.target.value})} placeholder="Ex: Van do João" /><Input themeKey={themeKey} label="Detalhes Adicionais" value={formData.details||''} onChange={e=>setFormData({...formData, details:e.target.value})} placeholder="Ex: Banco de trás, lado esquerdo" /><div className="flex flex-col gap-1.5"><label className="text-xs font-bold opacity-60 ml-1">Status</label><select className="bg-black/10 border border-white/10 text-white rounded-xl px-4 py-3.5 h-14" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>{['Pendente','Entregue'].map(x=><option key={x} value={x} className="bg-slate-900">{x}</option>)}</select></div><div className="pt-4"><Button themeKey={themeKey} onClick={()=>save('lostFound')}>Salvar</Button></div></> )}
                                 </div>
                             </div>
