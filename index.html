@@ -3456,7 +3456,40 @@
                                         <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} flex flex-col items-center relative stagger-in d-3 premium-card`}><h3 className="font-bold mb-6 w-full flex justify-between items-center">💰 Métodos</h3>{stats.p.length ? <DonutChart data={stats.p} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div>
                                         <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-4 premium-card`}><h3 className="font-bold mb-6 w-full">📍 Bairros</h3>{stats.b.length ? <HorizontalBarChart data={stats.b} theme={theme}/> : <p className="opacity-50">Sem dados</p>}</div>
                                     </div>
-                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3><div className="flex gap-2 mb-4"><input className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" placeholder="Adicionar lembrete..." value={noteText} onChange={e=>setNoteText(e.target.value)} onKeyPress={e=> e.key === 'Enter' && saveNote()} /><button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button></div><div className="space-y-2 max-h-40 overflow-y-auto pr-1">{data.notes.map(note => (<div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group"><span>{note.text}</span><button onClick={()=>del('notes', note.id)} className="opacity-50 hover:opacity-100 text-red-400"><Icons.Trash size={14}/></button></div>))}</div></div>
+                                    
+                                    <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}>
+                                        <h3 className="font-bold mb-4 flex items-center gap-2"><Icons.Clipboard size={20}/> Notas Rápidas</h3>
+                                        <div className="flex gap-2 mb-4">
+                                            <input 
+                                                className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-white/30" 
+                                                placeholder="Adicionar lembrete..." 
+                                                value={noteText} 
+                                                onChange={e=>setNoteText(e.target.value)} 
+                                                onKeyPress={e=> e.key === 'Enter' && saveNote()} 
+                                            />
+                                            <button onClick={saveNote} className={`${theme.primary} px-4 rounded-lg`}><Icons.Plus size={18}/></button>
+                                        </div>
+                                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                            {data.notes.map(note => (
+                                                <div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group border border-transparent hover:border-white/10 transition-colors">
+                                                    <span>{note.text}</span>
+                                                    {/* CORREÇÃO: Stop Propagation para garantir o clique e remoção da opacidade para melhor visibilidade */}
+                                                    <button 
+                                                        onClick={(e) => { 
+                                                            e.stopPropagation(); 
+                                                            del('notes', note.id); 
+                                                        }} 
+                                                        className="text-red-400 p-2 hover:bg-white/10 rounded transition-colors"
+                                                        title="Apagar nota"
+                                                    >
+                                                        <Icons.Trash size={16}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {data.notes.length === 0 && <p className="text-xs opacity-30 text-center py-2">Nenhuma nota.</p>}
+                                        </div>
+                                    </div>
+
                                     <div className={`${theme.card} p-4 ${theme.radius} border ${theme.border} stagger-in d-5 premium-card`}><h3 className="font-bold mb-4 flex gap-2"><Icons.Zap/> Acesso Rápido</h3><div className="grid grid-cols-2 gap-3"><Button id="btn-magic-create" theme={theme} variant="ai" onClick={()=>{setAiModal(true)}} className="col-span-2 flex items-center justify-center gap-2"><Icons.Stars/> Cadastro Mágico (IA)</Button><Button theme={theme} variant="secondary" onClick={()=>{setView('passengers');setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate()});setModal('passenger')}} className="text-xs">👤 Novo Pass</Button><Button theme={theme} variant="primary" onClick={()=>{setView('trips');setSuggestedTrip(null);setModal('trip')}} className="text-xs">🚐 Nova Viagem</Button></div></div>
                                 </div>
                             )}
@@ -3690,8 +3723,26 @@
 
                                                                         return (
                                                                             <div key={t.id} className="bg-white/5 p-3 rounded-lg flex justify-between items-center hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
-                                                                                <div className="flex items-center gap-3"><div className={`w-1 h-8 rounded-full ${t.status === 'Finalizada' ? 'bg-green-500' : 'bg-red-500'}`}></div><div><div className="font-bold text-sm">{t.time} - {t.driverName}</div><div className="text-xs opacity-50 flex gap-2"><span>#{t.id}</span><span>•</span><span>{t.status}</span><span>•</span><span>{pCount} pax</span></div></div></div>
-                                                                                <div className="flex gap-2"><button onClick={()=>updateTripStatus(t.id, 'Em andamento')} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20" title="Reabrir"><Icons.Back size={16}/></button><button onClick={()=>openEditTrip(t)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20" title="Ver/Editar"><Icons.Edit size={16}/></button></div>
+                                                                                <div className="flex items-center gap-3">
+                                                                                     <div className={`w-1 h-8 rounded-full ${t.status === 'Finalizada' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                                                                     <div>
+                                                                                        <div className="font-bold text-sm">{t.time} - {t.driverName}</div>
+                                                                                        <div className="text-xs opacity-50 flex gap-2">
+                                                                                            <span>#{t.id}</span>
+                                                                                            <span>•</span>
+                                                                                            <span>{t.status}</span>
+                                                                                            <span>•</span>
+                                                                                            {/* EXIBE QUANTIDADE CONGELADA DE PAX */}
+                                                                                            <span>{pCount} pax</span>
+                                                                                        </div>
+                                                                                     </div>
+                                                                                </div>
+                                                                                <div className="flex gap-2">
+                                                                                    <button onClick={()=>updateTripStatus(t.id, 'Em andamento')} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20" title="Reabrir"><Icons.Back size={16}/></button>
+                                                                                    <button onClick={()=>openEditTrip(t)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20" title="Ver/Editar"><Icons.Edit size={16}/></button>
+                                                                                    {/* NOVO: Botão de Excluir no Histórico */}
+                                                                                    <button onClick={()=>del('trips', t.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20" title="Excluir Permanentemente"><Icons.Trash size={16}/></button>
+                                                                                </div>
                                                                             </div>
                                                                         );
                                                                     })}
@@ -3701,7 +3752,11 @@
                                                     );
                                                 })}
                                             </div>
-                                        ) : (<div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">Nenhuma viagem no histórico deste mês.</div>)}
+                                        ) : (
+                                            <div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">
+                                                Nenhuma viagem no histórico deste mês.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -3807,7 +3862,6 @@
                                                                     </div>
                                                                 </div>
 
-                                                                {/* CORREÇÃO DE LAYOUT: Container com wrap para não cortar botões no mobile */}
                                                                 <div className="flex flex-wrap items-center justify-between w-full md:w-auto gap-3 md:gap-6 bg-black/20 p-3 md:p-0 md:bg-transparent rounded-lg">
                                                                     <div className="flex flex-col items-start md:items-end px-1 md:px-0">
                                                                         <div className="text-xs opacity-50 uppercase font-bold">Valor</div>
@@ -3830,12 +3884,14 @@
                                                                             <Icons.Phone size={16}/>
                                                                         </button>
                                                                         
-                                                                        {/* Botão de Excluir apenas para Extras */}
-                                                                        {trip.isExtra && (
-                                                                            <button onClick={() => del('trips', trip.id)} className="px-3 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex-shrink-0">
-                                                                                <Icons.Trash size={16}/>
-                                                                            </button>
-                                                                        )}
+                                                                        {/* ATUALIZADO: Botão de Excluir disponível para TODOS os tipos de viagem na cobrança */}
+                                                                        <button 
+                                                                            onClick={() => del('trips', trip.id)} 
+                                                                            className="px-3 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex-shrink-0"
+                                                                            title="Excluir Cobrança/Viagem"
+                                                                        >
+                                                                            <Icons.Trash size={16}/>
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -3843,11 +3899,7 @@
                                                     </div>
                                                 </div>
                                             );
-                                        }) : (
-                                            <div className="text-center py-10 opacity-30 text-sm border-2 border-dashed border-white/10 rounded-xl">
-                                                Nenhuma viagem registrada em {billingDate.toLocaleDateString('pt-BR', {month:'long'})}.
-                                            </div>
-                                        )}
+                                        }) : (<div className="text-center py-10 opacity-30 text-sm border-2 border-dashed border-white/10 rounded-xl">Nenhuma viagem registrada em {billingDate.toLocaleDateString('pt-BR', {month:'long'})}.</div>)}
                                     </div>
                                 </div>
                             )}
