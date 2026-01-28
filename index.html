@@ -1553,18 +1553,15 @@
                 const isMobile = window.innerWidth < 768;
                 
                 if (isMobile) {
-                    // Verifica se o alvo é um item do menu ou a barra lateral
-                    // CORREÇÃO: Lógica para abrir menu se o alvo for o menu em si ou um botão dele
                     const isMenuTarget = step.title === "Menu Inteligente" || (step.target && step.target.includes('menu-btn'));
-                    
                     if (isMenuTarget) {
                         setMenuOpen(true);
                     } else {
-                        // Se for um item de conteúdo (ex: dashboard, abas), fecha o menu
                         setMenuOpen(false);
                     }
                 }
             }, [tourStep, runTour]);
+
             // --- WORKER DE ROTAÇÃO AUTOMÁTICA DA MADRUGADA (MULTI-DIAS & ROBUSTO) ---
             useEffect(() => {
                 if (!db || !isFireConnected || !currentOpDate) return;
@@ -1598,7 +1595,9 @@
                         if (diffDays > 0) {
                             console.log(`🔄 Rotação Madrugada: ${diffDays} dias pendentes (${lastRotationStr} -> ${currentOpDate})`);
                             
-                            await listRef.transaction((currentList) => {
+                            // A chamada transaction deve ser tratada com cuidado no async/await
+                            // O segundo argumento é o callback de conclusão (onComplete)
+                            listRef.transaction((currentList) => {
                                 // CORREÇÃO: Tratamento robusto para lista nula ou objeto (Firebase quirk)
                                 let list = currentList;
                                 
@@ -1622,6 +1621,7 @@
                                 }
                                 return list;
                             }, (error, committed, snapshot) => {
+                                // Callback de conclusão
                                 if (error) { 
                                     console.error("Erro na rotação:", error); 
                                 } else if (committed) { 
@@ -2001,8 +2001,8 @@
                 if(!db) return alert("Sem conexão DB.");
                 try {
                     let ref;
-                    if (node === 'notes') ref = db.ref(`user_data/${user.username}/notes`);
-                    else if (node === 'preferences') ref = db.ref(`user_data/${user.username}/preferences`);
+                    // CORREÇÃO: Agora 'notes' cai no caso padrão (else) e grava na raiz /notes
+                    if (node === 'preferences') ref = db.ref(`user_data/${user.username}/preferences`);
                     else ref = db.ref(node);
 
                     if (type === 'create') {
