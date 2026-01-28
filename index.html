@@ -2634,7 +2634,12 @@
                 setModal(null);
             };
 
-            const saveNote = () => { if(!noteText.trim()) return; dbOp('create', 'notes', { text: noteText, completed: false }); setNoteText(''); };
+            const saveNote = () => { 
+                if(!noteText.trim()) return; 
+                // CORREÇÃO: Garante criação limpa
+                dbOp('create', 'notes', { text: noteText, completed: false }); 
+                setNoteText(''); 
+            };
             
             const del = (col, id) => { 
                 // Regra de segurança para Operadores
@@ -2643,31 +2648,22 @@
                     if(confirm('Excluir este item permanentemente?')) { dbOp('delete', col, id); setPaxDeleteSessionCount(prev => prev + 1); } return;
                 }
 
-                // --- CORREÇÃO: Exclusão de Viagem Madrugada (Virtual) ---
-                // Intercepta IDs que começam com 'mad_' na coleção de viagens
+                // --- CORREÇÃO: Exclusão Robusta de Viagem Madrugada ---
                 if (col === 'trips' && typeof id === 'string' && id.startsWith('mad_')) {
-                    if(!confirm('Excluir este registro da Madrugada?')) return;
+                    if(!confirm('Excluir esta viagem da Madrugada?')) return;
                     
-                    const parts = id.split('_'); // Formato: mad_YYYY-MM-DD_VAGA
+                    const parts = id.split('_'); // mad_YYYY-MM-DD_VAGA
+                    
+                    // 1. Remove da coleção principal de viagens (atualiza a aba Viagens)
+                    db.ref(`trips/${id}`).remove();
+
+                    // 2. Remove da tabela diária (atualiza a aba Tabela)
                     if (parts.length === 3) {
                         const dateKey = parts[1];
                         const vagaKey = parts[2];
-                        
-                        // Remove do nó correto no Firebase (daily_tables)
                         db.ref(`daily_tables/${dateKey}/madrugada/${vagaKey}`).remove();
-                        
-                        // Atualização Otimista da Interface (remove o item da lista sem esperar reload)
-                        setMonthlyMadrugada(prev => {
-                            const newState = { ...prev };
-                            if (newState[dateKey] && newState[dateKey].madrugada) {
-                                const newMad = { ...newState[dateKey].madrugada };
-                                delete newMad[vagaKey];
-                                newState[dateKey] = { ...newState[dateKey], madrugada: newMad };
-                            }
-                            return newState;
-                        });
                     }
-                    return; // Interrompe para não tentar deletar de 'trips'
+                    return; 
                 }
 
                 // CORREÇÃO: Restaurar agendamento ao excluir viagem finalizada
@@ -3729,16 +3725,16 @@
                                         </div>
                                         <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                                             {data.notes.map(note => (
-                                                <div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group border border-transparent hover:border-white/10 transition-colors">
-                                                    <span>{note.text}</span>
-                                                    {/* CORREÇÃO: Botão de exclusão reforçado */}
+                                                <div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm border border-transparent hover:border-white/10 transition-colors">
+                                                    <span className="flex-1 break-words">{note.text}</span>
+                                                    {/* CORREÇÃO: Botão de exclusão isolado e visível */}
                                                     <button 
                                                         onClick={(e) => { 
                                                             e.preventDefault();
                                                             e.stopPropagation(); 
                                                             del('notes', note.id); 
                                                         }} 
-                                                        className="text-red-400 p-2 hover:bg-white/10 rounded transition-colors cursor-pointer"
+                                                        className="text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
                                                         title="Apagar nota"
                                                     >
                                                         <Icons.Trash size={16}/>
