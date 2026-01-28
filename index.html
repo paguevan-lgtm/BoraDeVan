@@ -434,7 +434,15 @@
 
         const addMinutes = (time, mins) => {
             if(!time) return '';
-            const [h, m] = time.split(':').map(Number);
+            // Proteção: Se o horário já for um intervalo (ex: Madrugada), não calcula
+            if (time.includes('/')) return time;
+            
+            const parts = time.split(':');
+            if (parts.length < 2) return time;
+
+            const [h, m] = parts.map(Number);
+            if (isNaN(h) || isNaN(m)) return time;
+
             const date = new Date();
             date.setHours(h);
             date.setMinutes(m + mins);
@@ -443,6 +451,13 @@
 
         const calculateTimeSlot = (t) => { 
             if(!t) return '-'; 
+            
+            // CORREÇÃO: Tratamento para horários de madrugada (ex: "4:00/4:45")
+            // Se tiver barra, apenas substitui por hífen para ficar bonito, sem recalcular
+            if (t.includes('/')) {
+                return t.replace('/', ' - ');
+            }
+
             const endTime = addMinutes(t, 45);
             return `${t} - ${endTime}`; 
         };
@@ -1513,7 +1528,18 @@
                 const ref = db.ref('canned_messages_config/list');
                 const cb = ref.on('value', snap => {
                     const val = snap.val();
-                    setCannedMessages(val || []);
+                    let list = [];
+                    
+                    // CORREÇÃO CRÍTICA: Tratamento de Arrays Esparsos (com null)
+                    // Se o Firebase retornar [item, null, item], o filter(Boolean) remove os nulls
+                    if (Array.isArray(val)) {
+                        list = val.filter(item => item !== null && item !== undefined);
+                    } else if (val && typeof val === 'object') {
+                        // Se retornar objeto {key: item}, converte para array
+                        list = Object.values(val);
+                    }
+                    
+                    setCannedMessages(list);
                 });
                 return () => ref.off('value', cb);
             }, [db, user, isFireConnected]);
@@ -2173,6 +2199,43 @@
             const handleMadrugadaChange = (vaga, field, value) => {
                 const updated = { ...madrugadaData[vaga], [field]: value };
                 db.ref(`daily_tables/${currentOpDate}/madrugada/${vaga}`).update(updated);
+
+                // SINCRONIZAÇÃO AUTOMÁTICA COM ABA VIAGENS (TRIPS)
+                const qtd = field === 'qtd' ? value : (madrugadaData[vaga]?.qtd || 0);
+                const time = field === 'time' ? value : (madrugadaData[vaga]?.time || '');
+                const tripId = `mad_${currentOpDate}_${vaga}`;
+
+                if (parseInt(qtd) > 0) {
+                    const driverSp = spList.find(d => d.vaga === vaga);
+                    const driverName = driverSp ? driverSp.name : `Vaga ${vaga}`;
+                    const driverDb = data.drivers.find(d => d.name === driverName);
+                    
+                    const existingTrip = data.trips.find(t => t.id === tripId);
+                    
+                    // CORREÇÃO: Se editar uma viagem que estava cancelada, reativa ela para 'Em andamento'
+                    let currentStatus = existingTrip ? existingTrip.status : 'Em andamento';
+                    if (currentStatus === 'Cancelada') currentStatus = 'Em andamento';
+
+                    const tripPayload = {
+                        id: tripId,
+                        date: currentOpDate,
+                        time: time || '00:00', 
+                        driverName: driverName,
+                        driverId: driverDb ? driverDb.id : null,
+                        pCount: parseInt(qtd),
+                        isMadrugada: true, 
+                        status: currentStatus,
+                        isTemp: false,
+                        pCountSnapshot: existingTrip?.pCountSnapshot || null
+                    };
+
+                    db.ref(`trips/${tripId}`).update(tripPayload);
+                } else {
+                    const existingTrip = data.trips.find(t => t.id === tripId);
+                    if (existingTrip && existingTrip.status !== 'Finalizada') {
+                         db.ref(`trips/${tripId}`).remove();
+                    }
+                }
             };
 
             const toggleMadrugadaRiscado = (vaga) => {
@@ -2580,6 +2643,33 @@
                     if(confirm('Excluir este item permanentemente?')) { dbOp('delete', col, id); setPaxDeleteSessionCount(prev => prev + 1); } return;
                 }
 
+                // --- CORREÇÃO: Exclusão de Viagem Madrugada (Virtual) ---
+                // Intercepta IDs que começam com 'mad_' na coleção de viagens
+                if (col === 'trips' && typeof id === 'string' && id.startsWith('mad_')) {
+                    if(!confirm('Excluir este registro da Madrugada?')) return;
+                    
+                    const parts = id.split('_'); // Formato: mad_YYYY-MM-DD_VAGA
+                    if (parts.length === 3) {
+                        const dateKey = parts[1];
+                        const vagaKey = parts[2];
+                        
+                        // Remove do nó correto no Firebase (daily_tables)
+                        db.ref(`daily_tables/${dateKey}/madrugada/${vagaKey}`).remove();
+                        
+                        // Atualização Otimista da Interface (remove o item da lista sem esperar reload)
+                        setMonthlyMadrugada(prev => {
+                            const newState = { ...prev };
+                            if (newState[dateKey] && newState[dateKey].madrugada) {
+                                const newMad = { ...newState[dateKey].madrugada };
+                                delete newMad[vagaKey];
+                                newState[dateKey] = { ...newState[dateKey], madrugada: newMad };
+                            }
+                            return newState;
+                        });
+                    }
+                    return; // Interrompe para não tentar deletar de 'trips'
+                }
+
                 // CORREÇÃO: Restaurar agendamento ao excluir viagem finalizada
                 if (col === 'trips') {
                     const trip = data.trips.find(t => t.id === id);
@@ -2835,27 +2925,23 @@
                 } else {
                     const updates = { status, isTemp: false };
                     
-                    // CORREÇÃO DEFINITIVA: FORÇAR SNAPSHOT AO FINALIZAR
-                    // Sempre que finalizar, 'tira uma foto' dos passageiros atuais e grava na viagem.
-                    // Isso blinda a viagem de alterações futuras no cadastro dos passageiros.
+                    // CORREÇÃO CRÍTICA: GARANTIA DE SNAPSHOT AO FINALIZAR
                     if (status === 'Finalizada') {
-                        // Captura dados atuais
-                        const currentPassengers = data.passengers
-                            .filter(p => (trip.passengerIds || []).includes(p.id))
-                            .map(p => ({
-                                id: p.id,
-                                name: p.name,
-                                neighborhood: p.neighborhood,
-                                passengerCount: parseInt(p.passengerCount || 1),
-                                address: p.address,
-                                reference: p.reference
-                            }));
-                        
-                        // Grava no banco
-                        updates.passengersSnapshot = currentPassengers;
-                        updates.pCountSnapshot = currentPassengers.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+                        // Se for Madrugada, o snapshot é o pCount atual (não tem lista de passageiros)
+                        if (trip.isMadrugada) {
+                            if (trip.pCountSnapshot === undefined || trip.pCountSnapshot === null) {
+                                updates.pCountSnapshot = parseInt(trip.pCount || 0);
+                            }
+                        } 
+                        // Viagem normal sem snapshot: cria agora
+                        else if (trip.pCountSnapshot === undefined || trip.pCountSnapshot === null) {
+                            const currentTotal = data.passengers
+                                .filter(p => (trip.passengerIds || []).includes(p.id))
+                                .reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+                            updates.pCountSnapshot = parseInt(currentTotal);
+                        }
 
-                        // Limpa agenda
+                        // Limpa o horário do cadastro dos passageiros (apenas viagens normais)
                         if (trip.passengerIds && Array.isArray(trip.passengerIds)) {
                             trip.passengerIds.forEach(pid => {
                                 db.ref(`passengers/${pid}`).update({ time: '' });
@@ -2950,24 +3036,9 @@
             }, [historyTrips, historyDate, searchTerm, view]);
 
             // LOGICA DA ABA COBRANÇA (MOVED UP FOR REACT HOOK COMPLIANCE)
-            // NOVO EFFECT: Carrega dados da madrugada para o mês atual na aba de cobrança
-            useEffect(() => {
-                if (view !== 'billing' || !db) return;
-                
-                const year = billingDate.getFullYear();
-                const month = String(billingDate.getMonth() + 1).padStart(2, '0');
-                const startKey = `${year}-${month}-01`;
-                const endKey = `${year}-${month}-31`;
-
-                // Busca dados de daily_tables apenas para o intervalo do mês
-                db.ref('daily_tables').orderByKey().startAt(startKey).endAt(endKey).once('value', snapshot => {
-                    setMonthlyMadrugada(snapshot.val() || {});
-                });
-            }, [billingDate, view, db]);
-
             const billingData = useMemo(() => {
                 if (view !== 'billing') return { groups: [], summary: { pending: 0, paid: 0, total: 0 } };
-
+                // ... (código existente de billingData) ...
                 const targetMonth = billingDate.getMonth();
                 const targetYear = billingDate.getFullYear();
 
@@ -2989,21 +3060,18 @@
                     if (t.isExtra) {
                         value = parseFloat(t.value) || 0;
                         pCount = 0; 
+                    } else if (t.isMadrugada) {
+                        // Lógica para Madrugada (Real Trip)
+                        pCount = t.pCountSnapshot !== undefined ? parseInt(t.pCountSnapshot) : parseInt(t.pCount || 0);
+                        value = pCount * 4;
                     } else {
-                        // CORREÇÃO: Prioridade total ao Snapshot
-                        // 1. Tenta pegar o total gravado
+                        // Lógica para Viagens Normais
                         if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
                             pCount = parseInt(t.pCountSnapshot);
-                        } 
-                        // 2. Tenta somar do array de snapshot (caso o total não exista por algum motivo)
-                        else if (t.passengersSnapshot && Array.isArray(t.passengersSnapshot)) {
-                             pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
-                        } 
-                        // 3. Fallback legado: Só então olha para o cadastro vivo (viagens antigas sem snapshot)
-                        else {
-                            pCount = data.passengers
-                                .filter(p => (t.passengerIds||[]).includes(p.id))
-                                .reduce((a,b) => a + parseInt(b.passengerCount || 1), 0);
+                        } else if (t.passengersSnapshot) {
+                             pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount), 0);
+                        } else {
+                            pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
                         }
                         value = pCount * 4; 
                     }
@@ -3023,6 +3091,12 @@
                     const dailyDrivers = getRotatedList(date);
                     
                     Object.entries(dayData.madrugada).forEach(([vaga, mData]) => {
+                        // --- CORREÇÃO: EVITAR DUPLICIDADE ---
+                        // Se já existe uma viagem real criada para esta vaga/data em 'trips', 
+                        // ignoramos aqui para não duplicar na cobrança (o loop 'validTrips' acima já pegou).
+                        const tripId = `mad_${date}_${vaga}`;
+                        if (data.trips.some(t => t.id === tripId)) return;
+
                         if (mData.qtd && parseInt(mData.qtd) > 0) {
                             const driver = dailyDrivers.find(d => d.vaga === vaga);
                             const driverName = driver ? driver.name : `Vaga ${vaga}`;
@@ -3036,7 +3110,7 @@
                             if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 };
 
                             groups[dateKey].trips.push({
-                                id: `mad_${date}_${vaga}`, 
+                                id: tripId, 
                                 isMadrugada: true,
                                 date: date,
                                 time: mData.time || 'Madrugada',
@@ -3062,6 +3136,7 @@
                     groups: sortedGroups, 
                     summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } 
                 };
+            // CORREÇÃO: Adicionado 'billingDate' aqui para forçar recalculo ao trocar o mês
             }, [data.trips, data.passengers, view, billingDate, monthlyMadrugada, data.drivers]);
 
             const toggleHistoryDay = (date) => {
@@ -3402,15 +3477,71 @@
                                     {tableTab === 'madrugada' && (
                                         <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} anim-fade overflow-hidden`}>
                                             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0"><h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Tabela Madrugada</h3><div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto"><button onClick={addMadrugadaVaga} className="bg-green-600/20 text-green-400 border border-green-500/30 px-3 py-1 rounded text-xs font-bold hover:bg-green-600/30 whitespace-nowrap">Adicionar Vaga</button><div className="flex items-center gap-2"><span className="text-xs opacity-60 bg-white/5 px-2 py-1 rounded flex items-center hidden sm:flex whitespace-nowrap">{formatDisplayDate(getOperationalDate())}</span><button onClick={() => handlePrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: currentOpDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button></div></div></div><p className="text-xs opacity-50 mb-3 hide-on-print">Segure o item por 1 segundo para arrastar.</p>
-                                            <div id="print-madrugada-list" className="space-y-2">{madrugadaList.map((vaga, index) => { const driver = spList.find(d => d.vaga === vaga) || { name: 'Desconhecido' }; const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; return ( <div key={`${vaga}-${index}`} draggable="true" onDragStart={(e) => handleMadrugadaDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleMadrugadaDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'madrugada')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'madrugada'); } else { handleTouchEnd(e, -1, 'madrugada'); } }} className={`flex flex-col md:flex-row items-center gap-2 p-3 bg-black/20 rounded-lg border border-white/5 draggable-item cursor-grab active:cursor-grabbing ${isDraggingThis ? 'opacity-50 border-indigo-500 scale-105 shadow-2xl z-50 bg-indigo-900/40' : ''}`}> <div className="flex items-center gap-3 w-full md:w-auto flex-1 relative min-w-0"> <div className="opacity-30 cursor-grab hide-on-print flex-shrink-0"><Icons.List size={14}/></div> <button onClick={() => removeMadrugadaVaga(vaga)} className="text-red-400 opacity-50 hover:opacity-100 hide-on-print flex-shrink-0"><Icons.Trash size={14}/></button> <button onClick={() => toggleMadrugadaRiscado(vaga)} className={`p-1 rounded hover:bg-white/10 flex-shrink-0 ${mData.riscado ? 'text-red-400' : 'text-white/30'} hide-on-print`}> <Icons.Slash size={14}/> </button> <div className="font-mono text-sm bg-indigo-500/20 text-indigo-300 w-[35px] h-[30px] rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px]">{vaga}</div> <div className="flex flex-row items-center gap-2 min-w-0 flex-1"> <span className={`font-bold text-lg truncate ${mData.riscado ? 'line-through opacity-50' : ''}`}>{driver.name}</span> {mData.riscado && mData.comment && ( <div className="text-[12px] text-red-300 bg-red-900/30 px-2 py-1 rounded w-fit flex items-center justify-center leading-none truncate max-w-full relative top-[3px] font-bold">{mData.comment}</div> )} </div> </div> {!mData.riscado && ( <div className="flex items-center gap-2 w-full md:w-auto md:justify-end flex-shrink-0 mt-2 md:mt-0"> <div className="flex gap-2 hide-on-print w-full md:w-auto"> <input type="number" placeholder="Qtd" className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-20 text-center outline-none focus:border-indigo-500 transition-colors" value={mData.qtd} onChange={(e) => handleMadrugadaChange(vaga, 'qtd', e.target.value)} /> <select className="bg-black/30 border border-white/10 rounded px-3 py-2 w-full md:w-32 outline-none focus:border-indigo-500 transition-colors" value={mData.time} onChange={(e) => handleMadrugadaChange(vaga, 'time', e.target.value)} > <option value="">Horário</option> <option value="4:00/4:45">04:00/45</option> <option value="5:00/5:45">05:00/45</option> <option value="6:00/6:45">06:00/45</option> </select> </div> <div className="show-on-print hidden font-bold text-indigo-200 text-lg"> <span>{mData.time}</span> {mData.qtd && <span className="ml-2 opacity-70">({mData.qtd})</span>} </div> </div> )} </div> ); })} {madrugadaList.length === 0 && <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada hoje.</div>} </div>
-                                        </div>
-                                    )}
-                                    {tableTab === 'mensagens' && (
-                                        <div className={`${theme.card} p-5 rounded-xl border ${theme.border} anim-fade`}>
-                                            <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold opacity-80 flex items-center gap-2"><Icons.Message size={20}/> Mensagens Prontas</h3><button onClick={addCannedMessage} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2"><Icons.Plus size={16}/> Nova Mensagem</button></div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                {cannedMessages.map((msg, index) => ( <div key={msg.id} draggable="true" onDragStart={(e) => handleCannedDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleCannedDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'canned')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'canned'); } else { handleTouchEnd(e, -1, 'canned'); } }} className={`draggable-item bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-2 relative group hover:border-white/10 transition-colors ${draggedItem?.index === index && draggedItem?.listType === 'canned' ? 'opacity-50 border-blue-500 scale-105 z-50' : ''}`}> <div className="flex justify-between items-center pb-2 border-b border-white/5"> <div className="flex items-center gap-2 flex-1"> <div className="opacity-30 cursor-grab"><Icons.List size={14}/></div> <input className="bg-transparent text-sm font-bold w-full outline-none placeholder-white/30" value={msg.title} onChange={(e) => updateCannedMessage(msg.id, 'title', e.target.value)} placeholder="Título da Mensagem" /> </div> <button onClick={() => deleteCannedMessage(msg.id)} className="text-red-400 opacity-20 hover:opacity-100 transition-opacity p-1"> <Icons.X size={14}/> </button> </div> <textarea className="bg-black/30 rounded-lg p-2 text-sm w-full h-24 resize-none outline-none focus:bg-black/40 transition-colors border border-transparent focus:border-white/10" value={msg.text} onChange={(e) => updateCannedMessage(msg.id, 'text', e.target.value)} placeholder="Digite o texto da mensagem aqui..." /> <div className="flex justify-end pt-1"> <button onClick={() => copyToClip(msg.text)} className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors font-bold"> <Icons.Copy size={14}/> Copiar </button> </div> </div> ))}
-                                                {cannedMessages.length === 0 && (<div className="col-span-full py-10 text-center opacity-30 text-sm border-2 border-dashed border-white/10 rounded-xl">Nenhuma mensagem pronta. Clique em "Nova Mensagem" para criar.</div>)}
+                                            <div id="print-madrugada-list" className="space-y-2">
+                                                {madrugadaList.map((vaga, index) => { 
+                                                    const driver = spList.find(d => d.vaga === vaga) || { name: 'Desconhecido' }; 
+                                                    const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; 
+                                                    const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; 
+                                                    
+                                                    // VERIFICAÇÃO DE STATUS DA VIAGEM
+                                                    const tripId = `mad_${currentOpDate}_${vaga}`;
+                                                    const trip = data.trips.find(t => t.id === tripId);
+                                                    const isCancelled = trip && trip.status === 'Cancelada';
+                                                    const isFinished = trip && trip.status === 'Finalizada';
+                                                    
+                                                    // Estilo base
+                                                    let rowClass = `flex flex-col md:flex-row items-center gap-2 p-3 rounded-lg border draggable-item cursor-grab active:cursor-grabbing`;
+                                                    if (isCancelled) rowClass += ` bg-red-900/10 border-red-500/30 opacity-70`;
+                                                    else if (isFinished) rowClass += ` bg-green-900/10 border-green-500/30`;
+                                                    else rowClass += ` bg-black/20 border-white/5`;
+                                                    
+                                                    if (isDraggingThis) rowClass += ` opacity-50 border-indigo-500 scale-105 shadow-2xl z-50 bg-indigo-900/40`;
+
+                                                    return ( 
+                                                        <div key={`${vaga}-${index}`} draggable="true" onDragStart={(e) => handleMadrugadaDragStart(e, index)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleMadrugadaDrop(e, index)} onTouchStart={(e) => handleTouchStart(e, index, 'madrugada')} onTouchMove={handleTouchMove} onTouchEnd={(e) => { const touch = e.changedTouches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY); const closest = target ? target.closest('.draggable-item') : null; if (closest) { const parent = closest.parentNode; const dropIndex = Array.from(parent.children).indexOf(closest); handleTouchEnd(e, dropIndex, 'madrugada'); } else { handleTouchEnd(e, -1, 'madrugada'); } }} className={rowClass}> 
+                                                            <div className="flex items-center gap-3 w-full md:w-auto flex-1 relative min-w-0"> 
+                                                                <div className="opacity-30 cursor-grab hide-on-print flex-shrink-0"><Icons.List size={14}/></div> 
+                                                                <button onClick={() => removeMadrugadaVaga(vaga)} className="text-red-400 opacity-50 hover:opacity-100 hide-on-print flex-shrink-0"><Icons.Trash size={14}/></button> 
+                                                                <button onClick={() => toggleMadrugadaRiscado(vaga)} className={`p-1 rounded hover:bg-white/10 flex-shrink-0 ${mData.riscado ? 'text-red-400' : 'text-white/30'} hide-on-print`}> <Icons.Slash size={14}/> </button> 
+                                                                <div className="font-mono text-sm bg-indigo-500/20 text-indigo-300 w-[35px] h-[30px] rounded flex items-center justify-center flex-shrink-0 leading-none pt-[1px]">{vaga}</div> 
+                                                                <div className="flex flex-row items-center gap-2 min-w-0 flex-1"> 
+                                                                    <span className={`font-bold text-lg truncate ${mData.riscado || isCancelled ? 'line-through opacity-50' : ''}`}>{driver.name}</span> 
+                                                                    {isCancelled && <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded uppercase font-bold">Cancelada</span>}
+                                                                    {isFinished && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded uppercase font-bold">Finalizada</span>}
+                                                                    {mData.riscado && mData.comment && ( <div className="text-[12px] text-red-300 bg-red-900/30 px-2 py-1 rounded w-fit flex items-center justify-center leading-none truncate max-w-full relative top-[3px] font-bold">{mData.comment}</div> )} 
+                                                                </div> 
+                                                            </div> 
+                                                            {!mData.riscado && ( 
+                                                                <div className="flex items-center gap-2 w-full md:w-auto md:justify-end flex-shrink-0 mt-2 md:mt-0"> 
+                                                                    <div className="flex gap-2 hide-on-print w-full md:w-auto"> 
+                                                                        <input 
+                                                                            type="number" 
+                                                                            placeholder="Qtd" 
+                                                                            className={`bg-black/30 border ${isCancelled ? 'border-red-500/30 text-red-300' : 'border-white/10'} rounded px-3 py-2 w-full md:w-20 text-center outline-none focus:border-indigo-500 transition-colors`} 
+                                                                            value={mData.qtd} 
+                                                                            onChange={(e) => handleMadrugadaChange(vaga, 'qtd', e.target.value)} 
+                                                                        /> 
+                                                                        <select 
+                                                                            className={`bg-black/30 border ${isCancelled ? 'border-red-500/30 text-red-300' : 'border-white/10'} rounded px-3 py-2 w-full md:w-32 outline-none focus:border-indigo-500 transition-colors`} 
+                                                                            value={mData.time} 
+                                                                            onChange={(e) => handleMadrugadaChange(vaga, 'time', e.target.value)} 
+                                                                        > 
+                                                                            <option value="">Horário</option> 
+                                                                            <option value="4:00/4:45">04:00/45</option> 
+                                                                            <option value="5:00/5:45">05:00/45</option> 
+                                                                            <option value="6:00/6:45">06:00/45</option> 
+                                                                        </select> 
+                                                                    </div> 
+                                                                    <div className="show-on-print hidden font-bold text-indigo-200 text-lg"> 
+                                                                        <span>{mData.time}</span> 
+                                                                        {mData.qtd && <span className="ml-2 opacity-70">({mData.qtd})</span>} 
+                                                                    </div> 
+                                                                </div> 
+                                                            )} 
+                                                        </div> 
+                                                    ); 
+                                                })} 
+                                                {madrugadaList.length === 0 && <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada hoje.</div>} 
                                             </div>
                                         </div>
                                     )}
@@ -3500,13 +3631,14 @@
                                             {data.notes.map(note => (
                                                 <div key={note.id} className="flex justify-between items-center bg-white/5 p-2 rounded-lg text-sm group border border-transparent hover:border-white/10 transition-colors">
                                                     <span>{note.text}</span>
-                                                    {/* CORREÇÃO: Stop Propagation para garantir o clique e remoção da opacidade para melhor visibilidade */}
+                                                    {/* CORREÇÃO: Botão de exclusão reforçado */}
                                                     <button 
                                                         onClick={(e) => { 
+                                                            e.preventDefault();
                                                             e.stopPropagation(); 
                                                             del('notes', note.id); 
                                                         }} 
-                                                        className="text-red-400 p-2 hover:bg-white/10 rounded transition-colors"
+                                                        className="text-red-400 p-2 hover:bg-white/10 rounded transition-colors cursor-pointer"
                                                         title="Apagar nota"
                                                     >
                                                         <Icons.Trash size={16}/>
@@ -3565,8 +3697,6 @@
                                                                         <div className="flex gap-2 items-center">
                                                                             <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.luggageCount || 0}🎒</div>
                                                                             <div className="text-sm font-bold bg-white/10 px-2 py-1 rounded">{p.passengerCount}p</div>
-                                                                            
-                                                                            {/* BOTÃO ATUALIZADO: ABRE MODAL DE REAGENDAMENTO (SEM ERRO DE SYNTAX) */}
                                                                             <button 
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
@@ -3603,25 +3733,25 @@
                                             })()}
                                         </div>
 
-                                        {/* SEÇÃO EM VIAGEM ATUALIZADA */}
                                         <div className="space-y-3 pt-4 border-t border-white/10">
                                             <h4 className="text-xs font-bold uppercase tracking-widest opacity-60 pl-1 text-blue-400">Em Viagem</h4>
                                             {assignedPax.length > 0 ? (
                                                 assignedPax.map(p => {
-                                                    // Encontra a viagem ativa deste passageiro para verificar o status
                                                     const trip = data.trips.find(t => t.date === selectedDate && t.status !== 'Cancelada' && (t.passengerIds||[]).map(String).includes(String(p.id)));
                                                     const isFinalized = trip && trip.status === 'Finalizada';
                                                     
+                                                    // CORREÇÃO: Mostra o horário da viagem se o horário do passageiro foi apagado
+                                                    const displayTime = trip ? trip.time : (p.time || 'Sem horário');
+
                                                     return (
                                                         <div key={p.id} className={`${theme.card} ${theme.radius} border border-white/5 p-3 relative opacity-60 hover:opacity-100 transition-opacity`}>
                                                             <div className="flex justify-between items-center">
                                                                 <div>
                                                                     <div className="font-bold">{p.name}</div>
                                                                     <div className="text-xs opacity-70">
-                                                                        {p.neighborhood} • {p.time || 'Sem horário'}
+                                                                        {p.neighborhood} • {displayTime}
                                                                     </div>
                                                                 </div>
-                                                                {/* Badge condicional: Em Viagem (Verde) ou Finalizada (Cinza) */}
                                                                 <div className={`text-xs px-2 py-1 rounded font-bold ${isFinalized ? 'bg-gray-500/20 text-gray-400' : 'bg-green-500/20 text-green-400'}`}>
                                                                     {isFinalized ? 'Viagem Finalizada' : 'Em Viagem'}
                                                                 </div>
@@ -3658,20 +3788,35 @@
                                     <div className="space-y-4">
                                         <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest pl-1">Hoje / Em Andamento</h3>
                                         {activeTrips.slice().reverse().map((t, i) => {
-                                            // LÓGICA VISUAL DA LISTA
+                                            // LÓGICA DE SNAPSHOT
                                             let pCount = 0;
                                             if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
                                                 pCount = parseInt(t.pCountSnapshot);
+                                            } else if (t.isMadrugada) {
+                                                pCount = parseInt(t.pCount || 0);
                                             } else if (t.passengersSnapshot) {
                                                  pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
                                             } else {
                                                 pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
                                             }
                                             
-                                            const tripPassengers = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                                            const tripPassengers = t.isMadrugada ? [] : data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                                            
+                                            // Estilo condicional para Madrugada
+                                            const borderClass = t.isMadrugada 
+                                                ? 'border-dashed border-indigo-500/50 bg-indigo-500/5' 
+                                                : (t.isTemp ? 'border-dashed border-yellow-500/50' : `${theme.border}`);
+
                                             return (
-                                                <div key={t.id} style={{animationDelay: `${i * 100}ms`}} className={`${theme.card} ${theme.radius} border ${theme.border} p-5 relative overflow-hidden shadow-lg ${t.isTemp ? 'border-dashed border-yellow-500/50' : ''} stagger-in premium-card`}>
-                                                    {t.isTemp && (
+                                                <div key={t.id} style={{animationDelay: `${i * 100}ms`}} className={`${theme.card} ${theme.radius} border ${borderClass} p-5 relative overflow-hidden shadow-lg stagger-in premium-card`}>
+                                                    {t.isMadrugada && (
+                                                        <div className="absolute top-0 right-0">
+                                                            <div className="bg-indigo-500/20 text-indigo-400 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg">
+                                                                Madrugada
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {t.isTemp && !t.isMadrugada && (
                                                         <div className="absolute top-0 right-0 flex">
                                                             <div className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg flex items-center gap-1">
                                                                 <span>Temporária (Auto)</span>
@@ -3682,11 +3827,11 @@
                                                     )}
                                                     <div className="flex justify-between items-start mb-4">
                                                         <div>
-                                                            <h3 className="font-bold text-lg">Viagem #{t.id}</h3>
+                                                            <h3 className="font-bold text-lg">Viagem #{t.id.replace('mad_','')}</h3>
                                                             <div className={`${theme.accent} font-bold text-sm mt-1`}>{calculateTimeSlot(t.time)}</div>
                                                         </div>
                                                         <div className="flex gap-2">
-                                                            <IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" />
+                                                            {!t.isMadrugada && <IconButton theme={theme} onClick={()=>openEditTrip(t)} icon={Icons.Edit} variant="default" />}
                                                             <IconButton theme={theme} onClick={()=>del('trips', t.id)} icon={Icons.Trash} variant="danger" />
                                                         </div>
                                                     </div>
@@ -3699,10 +3844,12 @@
                                                         <Button theme={theme} disabled={true} className="opacity-50" variant="secondary" size="sm">Andamento</Button>
                                                         <Button theme={theme} onClick={()=>updateTripStatus(t.id, 'Cancelada')} variant="danger" size="sm" icon={Icons.X}>Cancelar</Button>
                                                     </div>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={()=>copyToClip(generateTripListText(tripPassengers, t.driverName, t.time))} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm premium-click"><Icons.Copy size={18}/> Copiar Lista</button>
-                                                        <button onClick={()=>sendWhatsapp(t)} className="flex-[2] bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform premium-click"><Icons.Send size={18}/> WhatsApp</button>
-                                                    </div>
+                                                    {!t.isMadrugada && (
+                                                        <div className="flex gap-2">
+                                                            <button onClick={()=>copyToClip(generateTripListText(tripPassengers, t.driverName, t.time))} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-sm premium-click"><Icons.Copy size={18}/> Copiar Lista</button>
+                                                            <button onClick={()=>sendWhatsapp(t)} className="flex-[2] bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform premium-click"><Icons.Send size={18}/> WhatsApp</button>
+                                                        </div>
+                                                    )}
                                                     <div className="mt-3 pt-3 border-t border-white/10">
                                                         <button onClick={()=>duplicateTrip(t)} className="w-full bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2 premium-click"><Icons.Repeat size={16}/> Duplicar para Hoje</button>
                                                     </div>
