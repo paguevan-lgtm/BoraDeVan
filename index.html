@@ -2668,15 +2668,29 @@
                 
                 // CORREÇÃO: Preservar status original se for edição
                 let statusToSave = 'Em andamento';
-                
+                let isTemp = false;
+
                 if (editingTripId) {
                     const originalTrip = data.trips.find(t => t.id === editingTripId);
                     if (originalTrip) {
                         statusToSave = originalTrip.status;
+                        isTemp = false; 
                     }
                 }
 
-                // Ao confirmar/editar, removemos a flag isTemp (isTemp: false ou null)
+                // CÁLCULO DO SNAPSHOT COMPLETO (DADOS + QUANTIDADE)
+                // Cria uma cópia isolada dos passageiros neste momento
+                const passengersSnapshot = suggestedTrip.passengers.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    neighborhood: p.neighborhood,
+                    passengerCount: parseInt(p.passengerCount || 1),
+                    address: p.address,
+                    reference: p.reference
+                }));
+
+                const totalPaxSnapshot = passengersSnapshot.reduce((acc, p) => acc + p.passengerCount, 0);
+
                 const pl = { 
                     id: editingTripId, 
                     driverId: driver.id, 
@@ -2685,16 +2699,33 @@
                     passengerIds: suggestedTrip.passengers.map(p=>p.id), 
                     date: formData.date || getTodayDate(), 
                     status: statusToSave, 
-                    isTemp: false 
+                    isTemp: isTemp,
+                    // Persiste os dados congelados
+                    passengersSnapshot: passengersSnapshot,
+                    pCountSnapshot: totalPaxSnapshot
                 };
                 
-                dbOp(editingTripId?'update':'create', 'trips', pl); setModal(null); setSuggestedTrip(null);
+                dbOp(editingTripId ? 'update' : 'create', 'trips', pl); 
+                setModal(null); 
+                setSuggestedTrip(null);
             };
 
             const openEditTrip = (t) => {
-                const dr = data.drivers.find(d=>d.id===t.driverId); const pax = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                const dr = data.drivers.find(d=>d.id===t.driverId); 
+                
+                // Ao editar, tentamos carregar do snapshot primeiro para manter fidelidade, 
+                // caso contrário busca do banco de dados atual
+                let pax = [];
+                if (t.passengersSnapshot) {
+                    pax = t.passengersSnapshot;
+                } else {
+                    pax = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
+                }
+
                 const occ = pax.reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
-                setFormData({driverId:t.driverId, time:t.time, date: t.date}); setEditingTripId(t.id);
+                
+                setFormData({driverId:t.driverId, time:t.time, date: t.date}); 
+                setEditingTripId(t.id);
                 setSuggestedTrip({ driver:dr || {name: 'Desconhecido', capacity: 0}, time:t.time, passengers:pax, occupancy:occ, date: t.date });
                 setModal('trip');
             };
@@ -2706,7 +2737,16 @@
             };
 
             const sendWhatsapp = (trip) => {
-                const d = data.drivers.find(x => x.id === trip.driverId); const p = data.passengers.filter(x => (trip.passengerIds||[]).includes(x.id));
+                const d = data.drivers.find(x => x.id === trip.driverId); 
+                
+                // Usa Snapshot se disponível
+                let p = [];
+                if (trip.passengersSnapshot) {
+                    p = trip.passengersSnapshot;
+                } else {
+                    p = data.passengers.filter(x => (trip.passengerIds||[]).includes(x.id));
+                }
+
                 if (!d || !d.phone) return alert('Motorista sem telefone.');
                 const msg = encodeURIComponent(generateWhatsappMessage(trip.id, p, d.name, trip.time, trip.date));
                 window.open(`https://wa.me/55${d.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
@@ -2717,7 +2757,6 @@
                 const targetMonth = historyDate.getMonth();
                 const targetYear = historyDate.getFullYear();
                 
-                // Filtra todas as viagens do mês selecionado
                 const monthTrips = data.trips.filter(t => {
                     if(!t.date) return false;
                     const [y, m, d] = t.date.split('-').map(Number);
@@ -2727,12 +2766,16 @@
                 const totalTrips = monthTrips.length;
                 const cancelledTrips = monthTrips.filter(t => t.status === 'Cancelada').length;
                 
-                // Conta passageiros apenas de viagens VÁLIDAS (não canceladas)
                 const validTrips = monthTrips.filter(t => t.status !== 'Cancelada');
                 const totalPax = validTrips.reduce((acc, t) => {
-                    // Pega os passageiros dessa viagem e soma suas quantidades (passengerCount)
-                    const pCount = data.passengers.filter(p => (t.passengerIds || []).includes(p.id))
+                    // LÓGICA DE SNAPSHOT NO RESUMO
+                    let pCount = 0;
+                    if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
+                        pCount = parseInt(t.pCountSnapshot);
+                    } else {
+                        pCount = data.passengers.filter(p => (t.passengerIds || []).includes(p.id))
                                                   .reduce((a, b) => a + parseInt(b.passengerCount || 1), 0);
+                    }
                     return acc + pCount;
                 }, 0);
 
@@ -2743,7 +2786,6 @@
                                 `👥 Total de Passageiros: ${totalPax}\n` +
                                 `🚫 Canceladas: ${cancelledTrips}`;
                 
-                // Gera o arquivo .txt para download
                 const blob = new Blob([summary], { type: 'text/plain' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -2757,23 +2799,41 @@
 
             // Ao atualizar status manualmente (Finalizar/Cancelar), também tornamos permanente (isTemp: false)
             // Se for CANCELAR uma temporária, deleta de vez.
-            // ATUALIZADO: Se Finalizar, limpa o horário dos passageiros.
             const updateTripStatus = (id, status) => { 
                 const trip = data.trips.find(t => t.id === id);
                 if (!trip) return;
 
                 if (trip.isTemp && status === 'Cancelada') {
-                    // Exclusão definitiva se for temporária e estiver sendo cancelada
                     db.ref('trips').child(id).remove();
                 } else {
                     const updates = { status, isTemp: false };
                     
-                    // NOVO: Se finalizar a viagem, remove o horário do cadastro dos passageiros
-                    if (status === 'Finalizada' && trip.passengerIds && Array.isArray(trip.passengerIds)) {
-                        trip.passengerIds.forEach(pid => {
-                            // Atualiza apenas o campo 'time' para vazio
-                            db.ref(`passengers/${pid}`).update({ time: '' });
-                        });
+                    // CORREÇÃO DEFINITIVA: FORÇAR SNAPSHOT AO FINALIZAR
+                    // Sempre que finalizar, 'tira uma foto' dos passageiros atuais e grava na viagem.
+                    // Isso blinda a viagem de alterações futuras no cadastro dos passageiros.
+                    if (status === 'Finalizada') {
+                        // Captura dados atuais
+                        const currentPassengers = data.passengers
+                            .filter(p => (trip.passengerIds || []).includes(p.id))
+                            .map(p => ({
+                                id: p.id,
+                                name: p.name,
+                                neighborhood: p.neighborhood,
+                                passengerCount: parseInt(p.passengerCount || 1),
+                                address: p.address,
+                                reference: p.reference
+                            }));
+                        
+                        // Grava no banco
+                        updates.passengersSnapshot = currentPassengers;
+                        updates.pCountSnapshot = currentPassengers.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+
+                        // Limpa agenda
+                        if (trip.passengerIds && Array.isArray(trip.passengerIds)) {
+                            trip.passengerIds.forEach(pid => {
+                                db.ref(`passengers/${pid}`).update({ time: '' });
+                            });
+                        }
                     }
 
                     db.ref('trips').child(id).update(updates);
@@ -2903,13 +2963,20 @@
                         value = parseFloat(t.value) || 0;
                         pCount = 0; 
                     } else {
-                        // CORREÇÃO CRÍTICA: Priorizar o SNAPSHOT se existir.
-                        // Isso impede que edições no passageiro alterem valores de viagens passadas na cobrança.
-                        if (t.pCountSnapshot !== undefined) {
+                        // CORREÇÃO: Prioridade total ao Snapshot
+                        // 1. Tenta pegar o total gravado
+                        if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
                             pCount = parseInt(t.pCountSnapshot);
-                        } else {
-                            // Fallback apenas para viagens muito antigas sem snapshot
-                            pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                        } 
+                        // 2. Tenta somar do array de snapshot (caso o total não exista por algum motivo)
+                        else if (t.passengersSnapshot && Array.isArray(t.passengersSnapshot)) {
+                             pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+                        } 
+                        // 3. Fallback legado: Só então olha para o cadastro vivo (viagens antigas sem snapshot)
+                        else {
+                            pCount = data.passengers
+                                .filter(p => (t.passengerIds||[]).includes(p.id))
+                                .reduce((a,b) => a + parseInt(b.passengerCount || 1), 0);
                         }
                         value = pCount * 4; 
                     }
@@ -3531,7 +3598,16 @@
                                     <div className="space-y-4">
                                         <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest pl-1">Hoje / Em Andamento</h3>
                                         {activeTrips.slice().reverse().map((t, i) => {
-                                            const pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                                            // LÓGICA VISUAL DA LISTA
+                                            let pCount = 0;
+                                            if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
+                                                pCount = parseInt(t.pCountSnapshot);
+                                            } else if (t.passengersSnapshot) {
+                                                 pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+                                            } else {
+                                                pCount = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id)).reduce((a,b)=>a+parseInt(b.passengerCount||1),0);
+                                            }
+                                            
                                             const tripPassengers = data.passengers.filter(p=>(t.passengerIds||[]).includes(p.id));
                                             return (
                                                 <div key={t.id} style={{animationDelay: `${i * 100}ms`}} className={`${theme.card} ${theme.radius} border ${theme.border} p-5 relative overflow-hidden shadow-lg ${t.isTemp ? 'border-dashed border-yellow-500/50' : ''} stagger-in premium-card`}>
@@ -3540,14 +3616,7 @@
                                                             <div className="bg-yellow-500/20 text-yellow-500 text-[10px] px-2 py-0.5 font-bold uppercase rounded-bl-lg flex items-center gap-1">
                                                                 <span>Temporária (Auto)</span>
                                                                 <span className="w-[1px] h-3 bg-yellow-500/30 mx-1"></span>
-                                                                {/* Timer agora é clicável para abrir edição */}
-                                                                <button 
-                                                                    onClick={(e) => { e.stopPropagation(); openEditTrip(t); }}
-                                                                    className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
-                                                                    title="Clique para editar o horário"
-                                                                >
-                                                                    <Icons.Clock size={10}/> <TempTripTimer date={t.date} time={t.time} />
-                                                                </button>
+                                                                <button onClick={(e) => { e.stopPropagation(); openEditTrip(t); }} className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer" title="Clique para editar o horário"> <Icons.Clock size={10}/> <TempTripTimer date={t.date} time={t.time} /> </button>
                                                             </div>
                                                         </div>
                                                     )}
@@ -3581,25 +3650,14 @@
                                             );
                                         })}
                                     </div>
-
-                                    {/* --- ADVANCED HISTORY SECTION --- */}
+                                    
                                     <div className="space-y-4 pt-6 border-t border-white/10">
                                         <div id="history-section" className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-sm font-bold opacity-50 uppercase tracking-widest pl-1">Histórico</h3>
-                                                <button 
-                                                    onClick={generateMonthSummary} 
-                                                    className="bg-white/5 hover:bg-white/10 p-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 text-blue-400" 
-                                                    title="Gerar Resumo do Mês"
-                                                >
-                                                    <Icons.List size={14}/> Resumo
-                                                </button>
+                                                <button onClick={generateMonthSummary} className="bg-white/5 hover:bg-white/10 p-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 text-blue-400" title="Gerar Resumo do Mês"><Icons.List size={14}/> Resumo</button>
                                             </div>
-                                            <div className="flex items-center gap-3 bg-black/20 p-1 rounded-lg">
-                                                <button onClick={prevHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronLeft size={18}/></button>
-                                                <span className="text-sm font-bold capitalize">{historyDate.toLocaleDateString('pt-BR', {month:'long', year:'numeric'})}</span>
-                                                <button onClick={nextHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronRight size={18}/></button>
-                                            </div>
+                                            <div className="flex items-center gap-3 bg-black/20 p-1 rounded-lg"><button onClick={prevHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronLeft size={18}/></button><span className="text-sm font-bold capitalize">{historyDate.toLocaleDateString('pt-BR', {month:'long', year:'numeric'})}</span><button onClick={nextHistoryMonth} className="p-1 hover:bg-white/10 rounded"><Icons.ChevronRight size={18}/></button></div>
                                         </div>
 
                                         {historyGroups.length > 0 ? (
@@ -3612,48 +3670,38 @@
 
                                                     return (
                                                         <div key={group.date} className={`${theme.card} rounded-xl border border-white/5 overflow-hidden premium-card`}>
-                                                            <div 
-                                                                onClick={() => toggleHistoryDay(group.date)}
-                                                                className="p-4 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors"
-                                                            >
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`text-xs p-1 rounded-lg transition-transform ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown/></div>
-                                                                    <div>
-                                                                        <div className="font-bold text-base">{formatDisplayDate(group.date)}</div>
-                                                                        <div className="text-xs opacity-50 capitalize">{dayName}</div>
-                                                                    </div>
-                                                                </div>
+                                                            <div onClick={() => toggleHistoryDay(group.date)} className="p-4 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors">
+                                                                <div className="flex items-center gap-3"><div className={`text-xs p-1 rounded-lg transition-transform ${isExpanded ? 'rotate-180' : ''}`}><Icons.ChevronDown/></div><div><div className="font-bold text-base">{formatDisplayDate(group.date)}</div><div className="text-xs opacity-50 capitalize">{dayName}</div></div></div>
                                                                 <div className="text-xs font-bold bg-white/10 px-2 py-1 rounded">{group.trips.length} viagens</div>
                                                             </div>
-                                                            
                                                             {isExpanded && (
                                                                 <div className="bg-black/20 border-t border-white/5 p-3 space-y-2 anim-fade">
-                                                                    {group.trips.map(t => (
-                                                                        <div key={t.id} className="bg-white/5 p-3 rounded-lg flex justify-between items-center hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
-                                                                            <div className="flex items-center gap-3">
-                                                                                 <div className={`w-1 h-8 rounded-full ${t.status === 'Finalizada' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                                                                 <div>
-                                                                                    <div className="font-bold text-sm">{t.time} - {t.driverName}</div>
-                                                                                    <div className="text-xs opacity-50">#{t.id} • {t.status}</div>
-                                                                                 </div>
+                                                                    {group.trips.map(t => {
+                                                                        // VISUALIZAÇÃO NO HISTÓRICO: Usa o snapshot se existir
+                                                                        let pCount = 0;
+                                                                        if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
+                                                                            pCount = parseInt(t.pCountSnapshot);
+                                                                        } else if (t.passengersSnapshot) {
+                                                                            pCount = t.passengersSnapshot.reduce((acc, p) => acc + parseInt(p.passengerCount || 1), 0);
+                                                                        } else {
+                                                                            pCount = data.passengers.filter(p => (t.passengerIds || []).includes(p.id))
+                                                                                                      .reduce((a, b) => a + parseInt(b.passengerCount || 1), 0);
+                                                                        }
+
+                                                                        return (
+                                                                            <div key={t.id} className="bg-white/5 p-3 rounded-lg flex justify-between items-center hover:bg-white/10 transition-colors border border-transparent hover:border-white/10">
+                                                                                <div className="flex items-center gap-3"><div className={`w-1 h-8 rounded-full ${t.status === 'Finalizada' ? 'bg-green-500' : 'bg-red-500'}`}></div><div><div className="font-bold text-sm">{t.time} - {t.driverName}</div><div className="text-xs opacity-50 flex gap-2"><span>#{t.id}</span><span>•</span><span>{t.status}</span><span>•</span><span>{pCount} pax</span></div></div></div>
+                                                                                <div className="flex gap-2"><button onClick={()=>updateTripStatus(t.id, 'Em andamento')} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20" title="Reabrir"><Icons.Back size={16}/></button><button onClick={()=>openEditTrip(t)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20" title="Ver/Editar"><Icons.Edit size={16}/></button></div>
                                                                             </div>
-                                                                            <div className="flex gap-2">
-                                                                                <button onClick={()=>updateTripStatus(t.id, 'Em andamento')} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20" title="Reabrir"><Icons.Back size={16}/></button>
-                                                                                <button onClick={()=>openEditTrip(t)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20" title="Ver/Editar"><Icons.Edit size={16}/></button>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                        ) : (
-                                            <div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">
-                                                Nenhuma viagem no histórico deste mês.
-                                            </div>
-                                        )}
+                                        ) : (<div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">Nenhuma viagem no histórico deste mês.</div>)}
                                     </div>
                                 </div>
                             )}
