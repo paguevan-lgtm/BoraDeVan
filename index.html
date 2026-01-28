@@ -2572,13 +2572,40 @@
             };
 
             const saveNote = () => { if(!noteText.trim()) return; dbOp('create', 'notes', { text: noteText, completed: false }); setNoteText(''); };
+            
             const del = (col, id) => { 
+                // Regra de segurança para Operadores
                 if (user && user.role === 'operador' && col === 'passengers') {
                     if (paxDeleteSessionCount >= 5) return alert('🔒 SEGURANÇA: Limite de exclusão de passageiros atingido nesta sessão.');
                     if(confirm('Excluir este item permanentemente?')) { dbOp('delete', col, id); setPaxDeleteSessionCount(prev => prev + 1); } return;
                 }
+
+                // CORREÇÃO: Restaurar agendamento ao excluir viagem finalizada
+                if (col === 'trips') {
+                    const trip = data.trips.find(t => t.id === id);
+                    
+                    // Se a viagem estava finalizada, os passageiros tiveram o horário limpo anteriormente.
+                    // Precisamos restaurar esses dados para que eles voltem para a aba "Agendamentos".
+                    if (trip && trip.status === 'Finalizada' && trip.passengerIds && Array.isArray(trip.passengerIds)) {
+                        if(confirm('Excluir viagem finalizada? Os passageiros voltarão para a lista de Agendamentos (Pendentes).')) {
+                            
+                            // Restaura data e hora nos passageiros baseando-se na viagem excluída
+                            trip.passengerIds.forEach(pid => {
+                                db.ref(`passengers/${pid}`).update({ 
+                                    time: trip.time, 
+                                    date: trip.date 
+                                });
+                            });
+                            
+                            dbOp('delete', col, id);
+                        }
+                        return; // Interrompe para não cair no confirm padrão abaixo
+                    }
+                }
+
                 if(confirm('Excluir este item permanentemente?')) dbOp('delete', col, id); 
             };
+            
             const changeTheme = (t) => { setThemeKey(t); if(user) { dbOp('update', 'preferences', { theme: t }); localStorage.setItem(`${user.username}_nexflow_theme`, t); } };
             const saveApiKey = (k) => { setGeminiKey(k); localStorage.setItem('nexflow_gemini_key', k); };
             
